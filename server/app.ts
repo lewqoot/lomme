@@ -41,6 +41,8 @@ const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 // iCloud URL. That keeps the Shortcut the user installs in sync with the code
 // that generated it.
 const SHORTCUT_FILE_NAME = 'Lomme.shortcut'
+const SHORTCUT_DOWNLOAD_URL = `https://lomme-production.up.railway.app/shortcuts/${SHORTCUT_FILE_NAME}`
+const SHORTCUT_IMPORT_URL = `shortcuts://import-shortcut/?name=Lomme&url=${encodeURIComponent(SHORTCUT_DOWNLOAD_URL)}`
 
 function telegramInitMaxAgeSeconds() {
   const configured = Number(process.env.TELEGRAM_INIT_MAX_AGE_SECONDS)
@@ -172,10 +174,10 @@ export async function buildApp(store: FinanceStore) {
 
   // A normal same-origin anchor is reliable in Telegram's iOS WebView even
   // when its web_app_open_link bridge silently drops an otherwise valid tap.
-  // Serve the signed template bundled with this exact app release, not an
-  // independent iCloud publication that can silently become stale.
+  // Hand the signed template to the native Shortcuts importer. Serving a
+  // .shortcut directly in Telegram's WebView renders the binary as text.
   app.get('/shortcut/install', async (_request, reply) =>
-    reply.header('Cache-Control', 'no-store').sendFile(`shortcuts/${SHORTCUT_FILE_NAME}`))
+    reply.header('Cache-Control', 'no-store').redirect(SHORTCUT_IMPORT_URL))
 
   app.post('/api/v1/auth/telegram', async (request, reply) => {
     const input = parse(authTelegramSchema, request.body)

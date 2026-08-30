@@ -6,7 +6,8 @@ const serverSource = readFileSync(new URL('../server/app.ts', import.meta.url), 
 
 describe('нативная установка быстрой команды', () => {
   it('открывает опубликованную команду напрямую и не отправляет файл в Telegram-чат', () => {
-    expect(settingsSource).toContain('href="/shortcut/install"')
+    expect(settingsSource).toContain('shortcuts://import-shortcut/')
+    expect(settingsSource).toContain("new URL('/shortcuts/Lomme.shortcut', window.location.origin)")
     expect(settingsSource).toContain('Открыть в «Командах»')
     expect(settingsSource).not.toContain('/shortcut-delivery')
     expect(settingsSource).not.toContain('Отправить команду в чат')

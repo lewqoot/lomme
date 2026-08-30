@@ -3,16 +3,13 @@ import { buildApp } from '../server/app.js'
 import { MemoryFinanceStore } from '../server/store/memory.js'
 
 describe('установка команды на iPhone', () => {
-  it('нативная ссылка отдаёт подписанную команду из текущей версии Lomme', async () => {
+  it('нативная ссылка открывает системный импорт подписанной команды', async () => {
     const app = await buildApp(new MemoryFinanceStore())
     const response = await app.inject({ method: 'GET', url: '/shortcut/install' })
     await app.close()
 
-    expect(response.statusCode).toBe(200)
-    expect(response.headers['content-type']).toContain('application/octet-stream')
-    expect(response.headers['content-disposition']).toContain('attachment')
-    expect(response.headers['content-disposition']).toContain('Lomme.shortcut')
-    expect(response.rawPayload.length).toBeGreaterThan(1_000)
+    expect(response.statusCode).toBe(302)
+    expect(response.headers.location).toBe('shortcuts://import-shortcut/?name=Lomme&url=https%3A%2F%2Flomme-production.up.railway.app%2Fshortcuts%2FLomme.shortcut')
     expect(response.headers['cache-control']).toBe('no-store')
   })
 })
