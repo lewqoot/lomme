@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BriefcaseBusiness, CalendarDays,
@@ -42,7 +42,10 @@ const InsightsChart = lazy(loadInsightsChart)
 type PageKey = 'home' | 'insights' | 'analytics' | 'accounts' | 'family' | 'settings' | 'categories' | 'search'
 type EditorState = { mode: 'create'; type: TransactionType } | { mode: 'edit'; transaction: TransactionView }
 type ActionProps = { data: AppSnapshot; onRefresh(): void; notify(text: string): void }
-type NavigationMotion = 'idle' | 'enter-sheet' | 'enter-push' | 'enter-fade' | 'exit-sheet' | 'exit-push' | 'exit-fade'
+type NavigationMotion = 'idle' | 'enter-sheet' | 'enter-push' | 'enter-fade' | 'enter-home'
+
+/** One short hand-off: a second tap can replace it instead of waiting for an exit. */
+const NAVIGATION_DURATION_MS = 240
 
 const normalizeMinus = (value: string) => value.replace(/^-/, '−')
 const money = (kopecks: number, sign = false) => `${sign && kopecks > 0 ? '+' : ''}${normalizeMinus(new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(kopecks / 100))} ₽`
@@ -188,7 +191,7 @@ export default function App() {
   }, [])
 
   const navigate = useCallback((next: PageKey, history: 'push' | 'pop' = 'push') => {
-    if (next === page || navigationMotion.startsWith('exit')) return
+    if (next === page) return
     haptic()
     if (navigationTimer.current) window.clearTimeout(navigationTimer.current)
     if (history === 'push') pageHistory.current.push(page)
@@ -200,38 +203,31 @@ export default function App() {
     // Home under each one, which showed through as two screens overlapping.
     const sheetPage = (target: PageKey) => target === 'insights'
 
-    if (page === 'home') {
-      const asSheet = sheetPage(next)
-      setNavigationMotion(asSheet ? 'enter-sheet' : 'enter-fade')
-      if (asSheet) setReceding(true)
-      setPage(next)
-      navigationTimer.current = window.setTimeout(() => {
-        setReceding(false)
-        setNavigationMotion('idle')
-        navigationTimer.current = null
-      }, prefersReducedMotion() ? 120 : asSheet ? 440 : 240)
-      return
-    }
-
     const toHome = next === 'home'
     const leavingSheet = sheetPage(page)
-    setNavigationMotion(toHome ? (leavingSheet ? 'exit-sheet' : 'exit-fade') : 'exit-push')
-    if (toHome && leavingSheet) setReceding(true)
+    const fromHome = page === 'home'
+    const asSheet = sheetPage(next)
+    const restoringHome = toHome && leavingSheet
+
+    // Change the destination immediately. The old two-stage exit/enter sequence
+    // swallowed every tap made during its 600 ms window; this single entrance can
+    // simply be cancelled and replaced by the next call to navigate().
+    setPage(next)
+    setEditor(null)
+    setReceding(restoringHome || (fromHome && asSheet))
+    setNavigationMotion(
+      fromHome ? (asSheet ? 'enter-sheet' : 'enter-fade')
+        : toHome ? (restoringHome ? 'idle' : 'enter-home')
+          : 'enter-push',
+    )
+    // A smooth reset made Home visibly travel after its destination had mounted.
+    window.scrollTo({ top: 0, behavior: 'auto' })
     navigationTimer.current = window.setTimeout(() => {
-      setPage(next)
-      setEditor(null)
       setReceding(false)
-      setNavigationMotion(toHome ? 'idle' : 'enter-push')
-      // This runs in the same task that mounts the next screen. A smooth reset
-      // made Home visibly travel upward after Search (and every other overlay)
-      // had already gone away.
-      window.scrollTo({ top: 0, behavior: 'auto' })
-      navigationTimer.current = window.setTimeout(() => {
-        setNavigationMotion('idle')
-        navigationTimer.current = null
-      }, prefersReducedMotion() ? 120 : 400)
-    }, prefersReducedMotion() ? 120 : leavingSheet && toHome ? 360 : 200)
-  }, [navigationMotion, page])
+      setNavigationMotion('idle')
+      navigationTimer.current = null
+    }, prefersReducedMotion() ? 120 : NAVIGATION_DURATION_MS)
+  }, [page])
   const goBack = useCallback(() => {
     const previous = pageHistory.current.at(-1) || 'home'
     navigate(previous, 'pop')
@@ -244,7 +240,7 @@ export default function App() {
       setEditor(null)
       setEditorClosing(false)
       editorTimer.current = null
-    }, prefersReducedMotion() ? 120 : 360)
+    }, prefersReducedMotion() ? 120 : NAVIGATION_DURATION_MS)
   }, [editorClosing])
   // Back is always an explicit in-app control. Relying on Telegram's native
   // BackButton left iOS clients without any visible way to return, while showing
@@ -487,7 +483,7 @@ function OperationRow({ item, category, shared, onOpen, onDelete }: {
   return <div
     className={`operation-swipe${settling ? ' settling' : ''}${revealed ? ' revealed' : ''}`}
     ref={row}
-    style={{ '--swipe': `${offset}px` } as CSSProperties}
+    style={{ '--swipe': `${offset}px`, '--swipe-progress': Math.min(offset / 92, 1) } as CSSProperties}
   >
     <button type="button" className="operation-delete" aria-label="Удалить операцию" onClick={() => { close(); onDelete() }}><Trash2 /></button>
     <button className="operation-row" type="button" onClick={() => (revealed ? close() : onOpen())}>
@@ -777,28 +773,15 @@ const DIGIT_MOTION_MS = 260
  * does. Replacing the previous one instead would drop a half-collapsed box and start
  * a full-width one in the same frame - the little skip that survived the first fix.
  */
-type LeavingDigits = { text: string; at: number; run: number; replaced: boolean; span: number | null }
+type LeavingDigits = { text: string; offset: number; run: number }
 
 function AmountDigits({ value }: { value: string }) {
   const [leaving, setLeaving] = useState<readonly LeavingDigits[]>([])
   const previous = useRef(value)
   const run = useRef(0)
   const timers = useRef<number[]>([])
-  const nodes = useRef(new Map<number, HTMLElement>())
 
   useEffect(() => () => { for (const id of timers.current) window.clearTimeout(id) }, [])
-
-  // A fragment collapses from the width it really had, measured off the node itself.
-  // Deriving it from `1ch` was close but never exact - Nunito's zero is half a pixel
-  // wider than the digits beside it - and starting half a pixel short is a visible
-  // twitch on the first frame of every delete. Measured before paint, so the
-  // fragment is only ever painted at its true width or narrower.
-  useLayoutEffect(() => {
-    const pending = leaving.filter((item) => item.span === null)
-    if (pending.length === 0) return
-    const spans = new Map(pending.map((item) => [item.run, nodes.current.get(item.run)?.getBoundingClientRect().width ?? 0]))
-    setLeaving((current) => current.map((item) => (spans.has(item.run) ? { ...item, span: spans.get(item.run) ?? 0 } : item)))
-  }, [leaving])
 
   useEffect(() => {
     const before = previous.current
@@ -812,9 +795,10 @@ function AmountDigits({ value }: { value: string }) {
     if (!removed) return
     run.current += 1
     const id = run.current
-    // A replaced fragment leaves out of flow, so it needs no width of its own.
-    const replaced = value.length > shared
-    setLeaving((current) => [...current, { text: removed, at: shared, run: id, replaced, span: replaced ? 0 : null }])
+    // The final amount lays out first. The old fragment is overlaid at its former
+    // tabular-digit position, so its departure only changes transform and opacity.
+    const offset = shared - (before.length - value.length) / 2
+    setLeaving((current) => [...current, { text: removed, offset, run: id }])
     const timer = window.setTimeout(() => setLeaving((current) => current.filter((item) => item.run !== id)), DIGIT_MOTION_MS)
     timers.current = [...timers.current.slice(-4), timer]
   }, [value])
@@ -822,17 +806,14 @@ function AmountDigits({ value }: { value: string }) {
   const chars = [...value]
   // Fragments sit where they were deleted from, and two that were deleted from the
   // same spot keep their order: the one deleted first is the one further right.
-  const placed = [...leaving].sort((a, b) => a.at - b.at || a.run - b.run)
+  const placed = [...leaving].sort((a, b) => a.offset - b.offset || a.run - b.run)
   const cells: ReactNode[] = []
   let cursor = 0
   for (const fragment of placed) {
-    const at = Math.min(fragment.at, chars.length)
-    for (; cursor < at; cursor++) cells.push(<i key={`${cursor}-${chars[cursor]}`}>{chars[cursor]}</i>)
     cells.push(<i
       key={`leaving-${fragment.run}`}
-      ref={(node) => { if (node) nodes.current.set(fragment.run, node); else nodes.current.delete(fragment.run) }}
-      className={`leaving${fragment.replaced ? ' replaced' : ''}${fragment.span === null ? '' : ' armed'}`}
-      style={fragment.span === null ? undefined : { '--leaving-span': `${fragment.span}px` } as CSSProperties}
+      className="leaving"
+      style={{ '--leaving-offset': `${fragment.offset}ch` } as CSSProperties}
     >{fragment.text}</i>)
   }
   for (; cursor < chars.length; cursor++) cells.push(<i key={`${cursor}-${chars[cursor]}`}>{chars[cursor]}</i>)
@@ -905,10 +886,10 @@ function GiftMark({ progress, finish }: { progress: number; finish: boolean }) {
 function PullShape({ pull }: { pull: number }) {
   if (pull <= 0) return null
   const W = 104
-  const H = 25 + pull * 78
+  const H = 103
   const R = 16
-  const waist = pull * 4.5          // how far each side pulls in at mid height
-  const flare = pull * 1.5          // and how far the bottom pushes out
+  const waist = 4.5                 // the fully-open silhouette is scaled in CSS
+  const flare = 1.5
   const c = waist * 1.333           // cubic control offset that lands on `waist`
   const d = [
     `M ${R} 0`, `H ${W - R}`, `Q ${W} 0 ${W} ${R}`,
