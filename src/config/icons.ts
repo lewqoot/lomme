@@ -151,6 +151,6 @@ export const FALLBACK_ICON = 'circle-slash-2'
  */
 export const CORE_ICON_IDS: readonly string[] = [
   'shopping-basket', 'utensils', 'shopping-bag', 'popcorn', 'activity', 'dumbbell',
-  'car', 'house', 'graduation-cap', 'plane', 'repeat', 'circle-slash-2', 'banknote', 'gift',
+  'car', 'house', 'graduation-cap', 'plane', 'repeat', 'shapes', 'circle-slash-2', 'banknote', 'gift',
   'wallet', 'briefcase-business', 'heart-pulse', 'coffee', 'bus', 'pill',
 ]

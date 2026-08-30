@@ -11,7 +11,7 @@ export const expenseCategories = [
   ['Образование', 'graduation-cap', '#8034F8'],
   ['Путешествия', 'plane', '#10AAF2'],
   ['Подписки', 'repeat', '#6B6B6B'],
-  ['Прочее', 'circle-slash-2', '#6B6B6B'],
+  ['Прочее', 'shapes', '#6B6B6B'],
 ] as const
 
 export const incomeCategories = [
@@ -23,5 +23,5 @@ export const incomeCategories = [
   ['Продажи', 'tag', '#10AAF2'],
   ['Возвраты', 'undo-2', '#32A76D'],
   ['Проценты', 'percent', '#9420F3'],
-  ['Прочее', 'circle-slash-2', '#6B6B6B'],
+  ['Прочее', 'shapes', '#6B6B6B'],
 ] as const
