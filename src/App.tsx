@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BriefcaseBusiness, CalendarDays,
@@ -772,14 +772,33 @@ const DIGIT_MOTION_MS = 260
  * digits rather than trim them, and used to blink out with no animation at all. The
  * fragment leaves from where it actually stood, so the digits around it never
  * reshuffle.
+ *
+ * Several fragments can be in flight at once, which is what holding down backspace
+ * does. Replacing the previous one instead would drop a half-collapsed box and start
+ * a full-width one in the same frame - the little skip that survived the first fix.
  */
+type LeavingDigits = { text: string; at: number; run: number; replaced: boolean; span: number | null }
+
 function AmountDigits({ value }: { value: string }) {
-  const [leaving, setLeaving] = useState<{ text: string; at: number; run: number; replaced: boolean } | null>(null)
+  const [leaving, setLeaving] = useState<readonly LeavingDigits[]>([])
   const previous = useRef(value)
   const run = useRef(0)
-  const timer = useRef(0)
+  const timers = useRef<number[]>([])
+  const nodes = useRef(new Map<number, HTMLElement>())
 
-  useEffect(() => () => window.clearTimeout(timer.current), [])
+  useEffect(() => () => { for (const id of timers.current) window.clearTimeout(id) }, [])
+
+  // A fragment collapses from the width it really had, measured off the node itself.
+  // Deriving it from `1ch` was close but never exact - Nunito's zero is half a pixel
+  // wider than the digits beside it - and starting half a pixel short is a visible
+  // twitch on the first frame of every delete. Measured before paint, so the
+  // fragment is only ever painted at its true width or narrower.
+  useLayoutEffect(() => {
+    const pending = leaving.filter((item) => item.span === null)
+    if (pending.length === 0) return
+    const spans = new Map(pending.map((item) => [item.run, nodes.current.get(item.run)?.getBoundingClientRect().width ?? 0]))
+    setLeaving((current) => current.map((item) => (spans.has(item.run) ? { ...item, span: spans.get(item.run) ?? 0 } : item)))
+  }, [leaving])
 
   useEffect(() => {
     const before = previous.current
@@ -789,23 +808,35 @@ function AmountDigits({ value }: { value: string }) {
     while (shared < before.length && shared < value.length && before[shared] === value[shared]) shared += 1
     const removed = before.slice(shared)
     // Nothing left the number, so leave any fragment still in flight alone: cutting
-    // it short here is what made typing straight after a delete jump.
+    // one short is what made the amount jump.
     if (!removed) return
     run.current += 1
-    setLeaving({ text: removed, at: shared, run: run.current, replaced: value.length > shared })
-    window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setLeaving(null), DIGIT_MOTION_MS)
+    const id = run.current
+    // A replaced fragment leaves out of flow, so it needs no width of its own.
+    const replaced = value.length > shared
+    setLeaving((current) => [...current, { text: removed, at: shared, run: id, replaced, span: replaced ? 0 : null }])
+    const timer = window.setTimeout(() => setLeaving((current) => current.filter((item) => item.run !== id)), DIGIT_MOTION_MS)
+    timers.current = [...timers.current.slice(-4), timer]
   }, [value])
 
   const chars = [...value]
-  const at = leaving ? Math.min(leaving.at, chars.length) : chars.length
-  return <>
-    {chars.slice(0, at).map((char, index) => <i key={`${index}-${char}`}>{char}</i>)}
-    {/* Keyed by run so a second delete inside the first one restarts the animation
-        instead of silently reusing a node that has already collapsed. */}
-    {leaving && <i key={`leaving-${leaving.run}`} className={`leaving${leaving.replaced ? ' replaced' : ''}`} style={{ '--leaving-count': leaving.text.length } as CSSProperties}>{leaving.text}</i>}
-    {chars.slice(at).map((char, index) => <i key={`${at + index}-${char}`}>{char}</i>)}
-  </>
+  // Fragments sit where they were deleted from, and two that were deleted from the
+  // same spot keep their order: the one deleted first is the one further right.
+  const placed = [...leaving].sort((a, b) => a.at - b.at || a.run - b.run)
+  const cells: ReactNode[] = []
+  let cursor = 0
+  for (const fragment of placed) {
+    const at = Math.min(fragment.at, chars.length)
+    for (; cursor < at; cursor++) cells.push(<i key={`${cursor}-${chars[cursor]}`}>{chars[cursor]}</i>)
+    cells.push(<i
+      key={`leaving-${fragment.run}`}
+      ref={(node) => { if (node) nodes.current.set(fragment.run, node); else nodes.current.delete(fragment.run) }}
+      className={`leaving${fragment.replaced ? ' replaced' : ''}${fragment.span === null ? '' : ' armed'}`}
+      style={fragment.span === null ? undefined : { '--leaving-span': `${fragment.span}px` } as CSSProperties}
+    >{fragment.text}</i>)
+  }
+  for (; cursor < chars.length; cursor++) cells.push(<i key={`${cursor}-${chars[cursor]}`}>{chars[cursor]}</i>)
+  return <>{cells}</>
 }
 
 
