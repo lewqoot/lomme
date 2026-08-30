@@ -1115,13 +1115,13 @@ function InsightTile({ title, icon, note, value, tone, sign, children }: {
   note?: string
   value: string
   tone?: 'warm' | 'green' | 'muted'
-  /** Money tiles tint by direction: what leaves reads warm, what arrives reads mint. */
+  /** Money tiles tint by direction: what leaves reads warm, what arrives reads lime. */
   sign?: 'in' | 'out'
   children?: ReactNode
 }) {
   const stacked = Boolean(children)
   return <article className={[
-    sign === 'out' ? 'sign-out' : '', sign === 'in' ? 'sign-in' : '',tone === 'warm' ? 'warm' : '', tone === 'green' ? 'mint' : '', stacked ? 'stacked' : ''].filter(Boolean).join(' ') || undefined}>
+    sign === 'out' ? 'sign-out' : '', sign === 'in' ? 'sign-in' : '',tone === 'warm' ? 'warm' : '', tone === 'green' ? 'lime' : '', stacked ? 'stacked' : ''].filter(Boolean).join(' ') || undefined}>
     <h3>{title}{icon}</h3>
     {children}
     {note && <small>{note}</small>}

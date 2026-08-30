@@ -250,10 +250,10 @@ describe('Telegram motion shell', () => {
     vi.stubGlobal('window', { Telegram: { WebApp: app } })
 
     syncTelegramTheme('system')
-    expect(app.setHeaderColor).toHaveBeenLastCalledWith('#1c201d')
+    expect(app.setHeaderColor).toHaveBeenLastCalledWith('#0e2026')
     syncTelegramTheme('light')
     expect(app.setHeaderColor).toHaveBeenLastCalledWith('#ffffff')
     syncTelegramTheme('dark')
-    expect(app.setBackgroundColor).toHaveBeenLastCalledWith('#1c201d')
+    expect(app.setBackgroundColor).toHaveBeenLastCalledWith('#0e2026')
   })
 })

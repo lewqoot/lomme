@@ -32,7 +32,6 @@
   /* Central measured primitives. Components below consume tokens only, so
      colour and typography changes have one reviewable source of truth. */
   --ref-color-04c268: #04c268;
-  --ref-color-050505: #050505;
   --ref-color-07e240: #07e240;
   --ref-color-087a49: #087a49;
   --ref-color-0bbf6c: #0bbf6c;
@@ -40,42 +39,25 @@
   --ref-color-0fc676: #0fc676;
   --ref-color-101010: #101010;
   --ref-color-10c979: #10c979;
-  --ref-color-111411: #111411;
-  --ref-color-138c55: #138c55;
   --ref-color-151515: #151515;
   --ref-color-161616: #161616;
   --ref-color-171717: #171717;
-  --ref-color-171817: #171817;
   --ref-color-171b18: #171b18;
-  --ref-color-183c2b: #183c2b;
-  --ref-color-187c50: #187c50;
-  --ref-color-18d082: #18d082;
-  --ref-color-198f59: #198f59;
-  --ref-color-1c201d: #1c201d;
-  --ref-color-202521: #202521;
   --ref-color-228e5b: #228e5b;
-  --ref-color-272c28: #272c28;
   --ref-color-282828: #282828;
-  --ref-color-303632: #303632;
   --ref-color-31d383: #31d383;
   --ref-color-333: #333;
   --ref-color-343936: #343936;
-  --ref-color-343a35: #343a35;
-  --ref-color-393f3a: #393f3a;
-  --ref-color-3a403b: #3a403b;
   --ref-color-3b237f: #3b237f;
   --ref-color-4a4a4a: #4a4a4a;
-  --ref-color-535a54: #535a54;
   --ref-color-54e39c: #54e39c;
   --ref-color-595959: #595959;
   --ref-color-5a5a5a: #5a5a5a;
-  --ref-color-5b3ce0: #5b3ce0;
   --ref-color-5b5b5b: #5b5b5b;
   --ref-color-5e655f: #5e655f;
   --ref-color-5f6360: #5f6360;
   --ref-color-68e5a6: #68e5a6;
   --ref-color-6b6b6b: #6b6b6b;
-  --ref-color-6fd9a5: #6fd9a5;
   --ref-color-6f736f: #6f736f;
   --ref-color-707070: #707070;
   --ref-color-717772: #717772;
@@ -103,16 +85,13 @@
   --ref-color-bdbdbd: #bdbdbd;
   --ref-color-bf4f3c: #bf4f3c;
   --ref-color-bf6a47: #bf6a47;
-  --ref-color-c2ebd9: #c2ebd9;
   --ref-color-c3c6c3: #c3c6c3;
   --ref-color-c5f0d3: #c5f0d3;
   --ref-color-c62525: #c62525;
   --ref-color-c8c8c8: #c8c8c8;
   --ref-color-c8cbc8: #c8cbc8;
   --ref-color-c9c9c9: #c9c9c9;
-  --ref-color-cdf8e2: #cdf8e2;
   --ref-color-cfcfcf: #cfcfcf;
-  --ref-color-cfeedf: #cfeedf;
   --ref-color-d6d6d6: #d6d6d6;
   --ref-color-d7f9e6: #d7f9e6;
   --ref-color-d7d9d7: #d7d9d7;
@@ -122,9 +101,6 @@
   --ref-color-d9f6e7: #d9f6e7;
   --ref-color-ddd: #ddd;
   --ref-color-dddddd: #dddddd;
-  --ref-color-ddf3e9: #ddf3e9;
-  --ref-color-ddf5ea: #ddf5ea;
-  --ref-color-ddfbec: #ddfbec;
   --ref-color-ded2ff: #ded2ff;
   --ref-color-dedede: #dedede;
   --ref-color-dedfdd: #dedfdd;
@@ -132,11 +108,9 @@
   --ref-color-dfe2df: #dfe2df;
   --ref-color-e0e0e0: #e0e0e0;
   --ref-color-e1e1e1: #e1e1e1;
-  --ref-color-e1f6ed: #e1f6ed;
   --ref-color-e2e2e2: #e2e2e2;
   --ref-color-e3e6e3: #e3e6e3;
   --ref-color-e4e4e4: #e4e4e4;
-  --ref-color-e4f6ec: #e4f6ec;
   --ref-color-e5e5e5: #e5e5e5;
   --ref-color-e7e7e7: #e7e7e7;
   --ref-color-e9520b: #e9520b;
@@ -144,29 +118,21 @@
   --ref-color-eaeaea: #eaeaea;
   --ref-color-ececec: #ececec;
   --ref-color-eceeeb: #eceeeb;
-  --ref-color-ecfbf4: #ecfbf4;
-  --ref-color-edfbf4: #edfbf4;
   --ref-color-eee: #eee;
   --ref-color-eef0ed: #eef0ed;
   --ref-color-ef5b0a: #ef5b0a;
   --ref-color-efefef: #efefef;
-  --ref-color-effcf5: #effcf5;
   --ref-color-f2a4b1: #f2a4b1;
   --ref-color-f2d7ca: #f2d7ca;
   --ref-color-f2f2f2: #f2f2f2;
-  --ref-color-f2f4f2: #f2f4f2;
-  --ref-color-f2fdf9: #f2fdf9;
   --ref-color-f3f3f3: #f3f3f3;
   --ref-color-f3f5f3: #f3f5f3;
-  --ref-color-f6fdfa: #f6fdfa;
   --ref-color-f7f2ff: #f7f2ff;
   --ref-color-f7f7f7: #f7f7f7;
-  --ref-color-f8fefc: #f8fefc;
   --ref-color-f9e2ce: #f9e2ce;
   --ref-color-f9e9df: #f9e9df;
   --ref-color-fad9c4: #fad9c4;
   --ref-color-fae0d0: #fae0d0;
-  --ref-color-fafefd: #fafefd;
   --ref-color-fbdcc9: #fbdcc9;
   --ref-color-fbeade: #fbeade;
   --ref-color-fce0cf: #fce0cf;
@@ -193,7 +159,6 @@
   --ref-rgba-20-20-20-p16: rgba(20, 20, 20, .16);
   --ref-rgba-20-20-20-p22: rgba(20, 20, 20, .22);
   --ref-rgba-206-206-206-p62: rgba(206, 206, 206, .62);
-  --ref-rgba-221-251-236-0: rgba(221, 251, 236, 0);
   --ref-rgba-242-242-242-p92: rgba(242, 242, 242, .92);
   --ref-rgba-249-249-249-p93: rgba(249, 249, 249, .93);
   --ref-rgba-25-30-27-p07: rgba(25, 30, 27, .07);
@@ -207,12 +172,35 @@
   --ref-rgba-255-255-255-p92: rgba(255, 255, 255, .92);
   --ref-rgba-255-255-255-p94: rgba(255, 255, 255, .94);
   --ref-rgba-255-255-255-p95: rgba(255, 255, 255, .95);
-  --ref-rgba-31-209-131-p12: rgba(31, 209, 131, .12);
-  --ref-rgba-39-44-40-p82: rgba(39, 44, 40, .82);
-  --ref-rgba-39-44-40-p92: rgba(39, 44, 40, .92);
-  --ref-rgba-39-44-40-p94: rgba(39, 44, 40, .94);
   --ref-rgba-5-5-5-p38: rgba(5,5,5,.38);
   --ref-rgba-57-37-128-p18: rgba(57, 37, 128, .18);
+  /* Brand primitives sampled from the Lomme logo (public/shortcuts/lomme-shortcut-icon.png),
+     not from the reference capture: lime #ddf146 with the mark's dark teal ink #032127.
+     The lime is far too light to carry text, so it is only ever a fill and the ink is
+     always what sits on it - the same pairing the logo itself uses. */
+  --logo-lime: #ddf146;
+  --logo-lime-strong: #c8de2f;
+  --logo-lime-soft: #eef7a8;
+  --logo-lime-wash: #f6fbd9;
+  --logo-lime-glow: #fbfdee;
+  /* The Insights wash: the reference's mint ramp re-cut in the brand hue. */
+  --logo-lime-mood: #edf8c9;
+  --logo-lime-mist: #fcfdf2;
+  --logo-lime-haze: #fdfef7;
+  --logo-lime-settle: #fefefb;
+  --logo-lime-fade: rgba(238, 247, 168, 0);
+  --logo-lime-ring: rgba(200, 222, 47, .34);
+  --logo-ink: #032127;
+  /* Dark theme reads as the mark's ink rather than the reference's green-grey. */
+  --logo-night: #061418;
+  --logo-night-surface: #0e2026;
+  --logo-night-panel: #172c32;
+  --logo-night-panel-strong: #21383f;
+  --logo-night-panel-soft: #112329;
+  --logo-night-line: #26414a;
+  --logo-night-frost: rgba(14, 32, 38, .84);
+  --logo-night-glass: rgba(14, 32, 38, .94);
+  --logo-night-insight: #10333a;
   /* Semantic money and state roles. Orange is expense, never generic status. */
   --income: var(--ref-color-0fc676);
   --income-text: var(--ref-color-087a49);
@@ -220,8 +208,6 @@
   --income-soft: var(--ref-color-c5f0d3);
   --income-soft-active: var(--ref-color-d9f6e7);
   --income-soft-switch: var(--ref-color-d9f5e7);
-  --income-glow: var(--ref-color-ddf3e9);
-  --income-sign-soft: var(--ref-color-e4f6ec);
   --expense: var(--ref-color-e9520b);
   --expense-chart: var(--ref-color-ef5b0a);
   --expense-soft: var(--ref-color-fad9c4);
@@ -240,7 +226,17 @@
   --danger-surface-strong: var(--ref-color-f2a4b1);
   --warning: var(--ref-color-bf6a47);
   --warning-soft: var(--ref-color-ffebe3);
-  --accent: var(--ref-color-5b3ce0);
+  /* Brand roles. `--brand` is a fill and `--on-brand` is the only colour allowed on
+     top of it; income/expense keep their own hues so money never reads as branding. */
+  --brand: var(--logo-lime);
+  --brand-strong: var(--logo-lime-strong);
+  --brand-soft: var(--logo-lime-soft);
+  --brand-wash: var(--logo-lime-wash);
+  --brand-glow: var(--logo-lime-glow);
+  --brand-fade: var(--logo-lime-fade);
+  --brand-ink: var(--logo-ink);
+  --on-brand: var(--logo-ink);
+  --accent: var(--brand);
   --chart-ink: var(--ref-color-101010);
   --chart-muted: var(--ref-color-8f9490);
   --chart-grid: var(--ref-color-d7d9d7);
@@ -293,7 +289,9 @@
   --font-weight-extrabold: 800;
   /* No screen may push the document sideways, whatever width the host reports. */
   overflow-x: clip;
-  color: var(--ref-color-050505);
+  /* Body text is the logo's ink, not a neutral black: at this darkness the teal cast
+     is invisible on its own but keeps every screen in the same family as the mark. */
+  color: var(--brand-ink);
   background: var(--ref-color-fff);
   /* Bundled Nunito first so every platform matches; ui-rounded (real SF Pro Rounded
      on iOS) covers the moment before the webfont lands. */
@@ -302,7 +300,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
-  --ink: var(--ref-color-050505);
+  --ink: var(--brand-ink);
   --muted: var(--ref-color-8a8a8a);
   --muted-strong: var(--ref-color-6b6b6b);
   --sub: var(--ref-color-595959);
@@ -431,15 +429,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: var(--income-bright);
-  background: radial-gradient(circle, var(--ref-color-cdf8e2) 0%, var(--ref-color-ddfbec) 58%, var(--ref-rgba-221-251-236-0) 100%);
+  /* The wallet disc is the logo in miniature: ink glyph on lime, fading out at the
+     rim so it still sits inside the frosted pill instead of punching a hole in it. */
+  color: var(--on-brand);
+  background: radial-gradient(circle, var(--brand) 0%, var(--brand-soft) 66%, var(--brand-fade) 100%);
 }
 .account-icon svg { width: 18px; height: 18px; stroke-width: 2.1; }
 .workspace-picker { max-width: 156px; position: relative; }
 .workspace-picker.shared {
-  box-shadow: inset 0 0 0 1px var(--ref-color-6fd9a5), var(--shadow);
+  box-shadow: inset 0 0 0 1px var(--brand-strong), var(--shadow);
 }
-.workspace-picker.shared .account-icon { position: relative; overflow: visible; background: var(--income-soft); }
+.workspace-picker.shared .account-icon { position: relative; overflow: visible; background: var(--brand-soft); }
 .shared-wallet-badge {
   position: absolute;
   right: -4px;
@@ -450,8 +450,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: var(--ref-color-fff);
-  background: var(--income-text);
+  color: var(--on-brand);
+  background: var(--brand);
 }
 .shared-wallet-badge svg { width: 9px; height: 9px; stroke-width: 2.6; }
 .workspace-picker > span:nth-child(2), .account-pill.static > span:last-child {
@@ -709,8 +709,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   overflow: hidden;
   flex: 0 1 auto;
   border-radius: 999px;
-  color: var(--income-text);
-  background: var(--income-soft);
+  /* Who added the row, not what it did to the balance - so it takes the brand chip
+     the other shared-wallet marks use, not the income green. */
+  color: var(--on-brand);
+  background: var(--brand-soft);
   font-size: var(--font-size-9);
   font-weight: var(--font-weight-semibold);
   line-height: 1.2;
@@ -750,7 +752,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   background: var(--surface);
   box-shadow: 0 10px 28px var(--ref-rgba-20-20-20-p1);
 }
-.floating-actions button.primary { width: 65px; height: 65px; }
+/* The only always-visible action on Home, so this is where the brand lives: a lime
+   disc with the mark's ink glyph. Its own shadow is tinted, or a neutral grey halo
+   would grey the lime down at the edge. */
+.floating-actions button.primary {
+  width: 65px;
+  height: 65px;
+  color: var(--on-brand);
+  background: var(--brand);
+  box-shadow: 0 10px 28px var(--ref-rgba-20-20-20-p14);
+}
 .floating-actions svg { width: 21px; height: 21px; stroke-width: 1.7; }
 .floating-actions button.primary svg { width: 23px; height: 23px; }
 /* Overlay chrome */
@@ -812,7 +823,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   border-radius: 32px 32px 0 0;
   box-shadow: 0 -10px 30px var(--ref-rgba-20-20-20-p13);
   touch-action: pan-y;
-  background: linear-gradient(180deg, var(--ref-color-ddf5ea) 0%, var(--ref-color-edfbf4) 14%, var(--ref-color-f6fdfa) 26%, var(--ref-color-fdfffe) 37%, var(--ref-color-fff) 45%);
+  /* Same wash the reference used at the top of the sheet, retuned from mint to the
+     brand lime so the sheet arrives looking like the app it belongs to. */
+  background: linear-gradient(180deg, var(--brand-soft) 0%, var(--brand-wash) 14%, var(--brand-glow) 26%, var(--ref-color-fdfffe) 37%, var(--ref-color-fff) 45%);
 }
 .insights-top { justify-content: space-between; }
 
@@ -820,7 +833,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .insights-balance { padding: 10px 0 18px; display: grid; justify-items: center; }
 .insights-balance > strong { margin-top: 11px; font-size: var(--font-size-43); font-weight: var(--font-weight-balance); letter-spacing: -1.7px; }
-.saving-line { width: 62%; margin-top: 8px; display: grid; justify-items: center; color: var(--income-text); font-size: var(--font-size-11-5); }
+/* "Saved N% of income" is an achievement, not a signed amount, so it carries the
+   brand rather than the income green. */
+.saving-line { width: 62%; margin-top: 8px; display: grid; justify-items: center; color: var(--brand-ink); font-size: var(--font-size-11-5); }
 .saving-line span { display: flex; align-items: center; gap: 6px; }
 .saving-line span svg { width: 16px; height: 16px; stroke-width: 1.8; }
 .saving-line i {
@@ -834,7 +849,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     90deg,
     var(--ref-color-f2d7ca) 0 calc(100% - var(--saved, 0%) - 1%),
     var(--ref-color-eee) calc(100% - var(--saved, 0%) - 1%) calc(100% - var(--saved, 0%) + 1%),
-    var(--ref-color-18d082) calc(100% - var(--saved, 0%) + 1%)
+    var(--brand-strong) calc(100% - var(--saved, 0%) + 1%)
   );
 }
 .chart-legend { margin-top: 3px; display: flex; justify-content: center; gap: 12px; color: var(--expense-chart); font-size: var(--font-size-10-5); }
@@ -1208,8 +1223,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   text-align: left;
   background: var(--panel);
 }
-.all-accounts-row.active { border-color: var(--ref-color-6fd9a5); }
-.all-accounts-row > svg { width: 18px; color: var(--income-text); }
+.all-accounts-row.active { border-color: var(--brand-strong); }
+.all-accounts-row > svg { width: 18px; color: var(--brand-ink); }
 .all-accounts-row span, .all-accounts-row strong { font-size: var(--font-size-12); font-weight: var(--font-weight-semibold); }
 .reference-account-list { margin-top: 9px; display: grid; gap: 3px; }
 .reference-account-list article {
@@ -1223,11 +1238,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   gap: 3px;
   background: var(--panel);
 }
-.reference-account-list article.active { border-color: var(--ref-color-6fd9a5); }
-.reference-account-list article.shared { background: linear-gradient(90deg, var(--income-soft), var(--panel) 38%); }
-.reference-account-list article.editing { border-color: var(--ref-color-6fd9a5); }
+.reference-account-list article.active { border-color: var(--brand-strong); }
+.reference-account-list article.shared { background: linear-gradient(90deg, var(--brand-soft), var(--panel) 38%); }
+.reference-account-list article.editing { border-color: var(--brand-strong); }
 .account-select { min-width: 0; min-height: 48px; padding: 0 4px 0 1px; border: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; color: var(--ink); text-align: left; background: transparent; }
-.reference-account-list article .account-icon { width: 38px; height: 38px; border-radius: 50%; background: var(--ref-color-c2ebd9); }
+.reference-account-list article .account-icon { width: 38px; height: 38px; border-radius: 50%; background: var(--brand-soft); }
 .reference-account-list article > strong { font-size: var(--font-size-12); font-weight: var(--font-weight-semibold); }
 .reference-account-list article > b { font-size: var(--font-size-12); font-weight: var(--font-weight-semibold); }
 .reference-account-list article > svg { width: 21px; }
@@ -1235,9 +1250,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .account-row-copy strong { overflow: hidden; font-size: var(--font-size-12); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .account-row-copy small { overflow: hidden; color: var(--muted); font-size: var(--font-size-9-5); text-overflow: ellipsis; white-space: nowrap; }
 .account-select b { font-size: var(--font-size-12); font-weight: var(--font-weight-semibold); white-space: nowrap; }
-.account-selected-mark { width: 17px; color: var(--income-text); }
+.account-selected-mark { width: 17px; color: var(--brand-ink); }
 .account-edit { width: 36px; height: 36px; border: 0; border-radius: 12px; display: grid; place-items: center; color: var(--muted); background: transparent; }
-.account-edit.active { color: var(--income-text); background: var(--income-soft); }
+.account-edit.active { color: var(--on-brand); background: var(--brand-soft); }
 .account-edit svg, .member-remove svg { width: 17px; }
 .account-manage-form.inline-form { grid-column: 1 / -1; width: 100%; margin: 3px 0 1px; padding: 12px; border-radius: 16px; background: var(--ref-color-fff); }
 .account-manage-form .danger-text-button:disabled { color: var(--muted); opacity: .7; }
@@ -1306,7 +1321,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .beta-card p { margin: 0; display: grid; }
 .beta-card p strong { font-size: var(--font-size-15); }
 .beta-card p small, .beta-card footer { color: var(--muted); font-size: var(--font-size-10); }
-.beta-card > button { min-height: 30px; padding: 0 13px; border: 0; border-radius: 999px; color: var(--ref-color-fff); background: var(--accent); font-size: var(--font-size-11); font-weight: var(--font-weight-bold); }
+.beta-card > button { min-height: 30px; padding: 0 13px; border: 0; border-radius: 999px; color: var(--on-brand); background: var(--accent); font-size: var(--font-size-11); font-weight: var(--font-weight-bold); }
 .beta-card footer { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; }
 .beta-card footer i { grid-column: 1 / -1; height: 4px; margin-top: 6px; border-radius: 9px; background: linear-gradient(90deg, var(--ref-color-151515) 42%, var(--ref-color-d8d8d8) 42%); }
 .settings-label { margin: 15px 11px 6px; display: block; color: var(--ref-color-8a8a8a); font-size: var(--font-size-11); }
@@ -1584,10 +1599,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .category-editor-error { margin-bottom: 0; }
 .category-editor-actions { padding-top: 8px; display: flex; gap: 7px; }
 .category-save, .category-delete { height: 58px; border: 0; border-radius: 17px; display: grid; place-items: center; }
-.category-save { flex: 1; color: var(--ref-color-fff); background: var(--ref-color-151515); font-size: var(--font-size-15); font-weight: var(--font-weight-heavy); }
+.category-save { flex: 1; color: var(--on-brand); background: var(--brand); font-size: var(--font-size-15); font-weight: var(--font-weight-heavy); }
 .category-delete { width: 58px; color: var(--danger-action); background: var(--danger-soft); }
 .category-delete svg { width: 21px; height: 21px; }
-.category-save:disabled, .category-delete:disabled { opacity: .48; }
+.category-delete:disabled { opacity: .48; }
+.category-save:disabled { color: var(--muted); background: var(--panel-strong); }
 
 .content-card, .inline-form { padding: 14px; border-radius: 20px; background: var(--panel); }
 .content-card > h2 { margin: 0 0 11px; font-size: var(--font-size-13); }
@@ -1605,7 +1621,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font-size: var(--font-size-12);
 }
 .draft-input { min-height: 76px; padding-top: 11px; resize: vertical; }
-.field input:focus, .field select:focus, .draft-input:focus { border-color: var(--ref-color-6fd9a5); box-shadow: 0 0 0 3px var(--ref-rgba-31-209-131-p12); }
+.field input:focus, .field select:focus, .draft-input:focus { border-color: var(--brand-strong); box-shadow: 0 0 0 3px var(--logo-lime-ring); }
 .primary-button, .secondary-button {
   min-height: 47px;
   padding: 0 15px;
@@ -1618,13 +1634,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-heading);
 }
-.primary-button { color: var(--ref-color-fff); background: var(--ink); }
+.primary-button { color: var(--on-brand); background: var(--brand); }
 .secondary-button { background: var(--ref-color-e3e6e3); }
-.primary-button:disabled, .secondary-button:disabled { opacity: .42; }
+.secondary-button:disabled { opacity: .42; }
+.primary-button:disabled { color: var(--muted); background: var(--panel-strong); }
 .wide { width: 100%; }
 .member-list { margin-bottom: 13px; display: grid; gap: 10px; }
 .member-list > div { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
-.member-list > div > span { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: var(--ref-color-187c50); background: var(--income-soft); font-weight: var(--font-weight-extrabold); }
+.member-list > div > span { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: var(--on-brand); background: var(--brand-soft); font-weight: var(--font-weight-extrabold); }
 .member-list p { margin: 0; display: grid; font-size: var(--font-size-12); }
 .member-list small, .member-list em { color: var(--muted); font-size: var(--font-size-9-5); font-style: normal; }
 .member-remove { min-height: 34px; padding: 0 9px; border: 0; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: var(--danger); background: var(--danger-soft); font-size: var(--font-size-10); font-weight: var(--font-weight-bold); }
@@ -1632,28 +1649,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .native-share-note { margin: 8px 8px 0; color: var(--muted); font-size: var(--font-size-10); line-height: 1.4; text-align: center; }
 .family-account-list { display: grid; gap: 5px; }
 .family-account-list > button { width: 100%; min-height: 52px; padding: 5px 8px; border: 1px solid transparent; border-radius: 15px; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 9px; color: var(--ink); text-align: left; background: var(--surface); }
-.family-account-list > button.active { border-color: var(--ref-color-6fd9a5); background: var(--income-soft); }
+.family-account-list > button.active { border-color: var(--brand-strong); background: var(--brand-soft); }
 .family-account-list > button > span:nth-child(2) { min-width: 0; display: grid; }
 .family-account-list strong, .family-account-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .family-account-list strong { font-size: var(--font-size-11-5); }
 .family-account-list small { color: var(--muted); font-size: var(--font-size-9-5); }
-.family-account-list > button > svg { width: 18px; color: var(--income-text); }
+.family-account-list > button > svg { width: 18px; color: var(--brand-ink); }
 .card-copy { margin: 0; color: var(--muted); font-size: var(--font-size-11); line-height: 1.45; }
 .invite-wallet-mark { margin-bottom: 15px; display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 10px; }
 .invite-wallet-mark .account-icon { width: 46px; height: 46px; }
 .invite-wallet-mark p { margin: 0; display: grid; gap: 3px; }
 .invite-wallet-mark strong { font-size: var(--font-size-12); }
 .invite-wallet-mark small { color: var(--muted); font-size: var(--font-size-10); line-height: 1.4; }
-.invite-success-mark { padding: 11px; border: 1px solid var(--ref-color-6fd9a5); border-radius: 15px; background: var(--income-soft); }
+.invite-success-mark { padding: 11px; border: 1px solid var(--brand-strong); border-radius: 15px; background: var(--brand-soft); }
 .invite-gate .content-card { margin-top: 18px; }
 .invite-loading { min-height: 210px; margin-top: 18px; border-radius: 20px; display: grid; place-content: center; justify-items: center; gap: 7px; color: var(--ink); background: var(--panel); text-align: center; }
-.invite-loading svg { width: 28px; height: 28px; margin-bottom: 5px; color: var(--income-text); }
+.invite-loading svg { width: 28px; height: 28px; margin-bottom: 5px; color: var(--brand-ink); }
 .invite-loading strong { font-size: var(--font-size-13); }
 .invite-loading span { color: var(--muted); font-size: var(--font-size-10-5); }
 .invite-gate .secondary-button + .secondary-button, .invite-gate .primary-button + .secondary-button { margin-top: 8px; }
 .invite-link { margin-bottom: 8px; padding: 11px; border-radius: 11px; background: var(--ref-color-fff); color: var(--ref-color-5e655f); word-break: break-all; font-size: var(--font-size-10); }
 .empty { min-height: 210px; padding: 28px; border-radius: 20px; display: grid; place-items: center; align-content: center; text-align: center; background: var(--panel); }
-.empty > span { width: 50px; height: 50px; margin-bottom: 12px; border-radius: 16px; display: grid; place-items: center; color: var(--ref-color-198f59); background: var(--income-soft); }
+.empty > span { width: 50px; height: 50px; margin-bottom: 12px; border-radius: 16px; display: grid; place-items: center; color: var(--on-brand); background: var(--brand-soft); }
 .empty p { max-width: 260px; margin: 6px 0 0; color: var(--muted); font-size: var(--font-size-11-5); line-height: 1.4; }
 
 /* Operation editor */
@@ -1740,7 +1757,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .transaction-meta.is-transfer > label:first-child { grid-column: 1; justify-content: flex-start; }
 .transaction-meta.is-transfer > label:nth-child(2) { grid-column: 3; }
 .transaction-meta.is-transfer > .currency-pill { grid-column: 4; }
-.transaction-meta label .account-icon { width: 32px; height: 32px; border-radius: 50%; background: var(--ref-color-c2ebd9); }
+.transaction-meta label .account-icon { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-soft); }
 .transaction-meta p { min-width: 0; margin: 0; display: grid; font-size: var(--font-size-10-5); line-height: 1.15; }
 .transaction-meta p strong, .transaction-meta p small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .transaction-meta p small { margin-top: 3px; color: var(--muted); font-size: var(--font-size-9); }
@@ -1847,19 +1864,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   align-items: center;
   justify-content: center;
   gap: 7px;
-  color: var(--ref-color-fff);
-  background: var(--ref-color-171717);
+  color: var(--on-brand);
+  background: var(--brand);
   font-size: var(--font-size-13);
   font-weight: var(--font-weight-emphasis);
 }
-.save-operation:disabled { opacity: .4; cursor: default; }
+/* Lime at 40% opacity is barely distinguishable from the page, so the disabled state
+   drops the brand fill instead of fading it. */
+.save-operation:disabled { color: var(--muted); background: var(--panel-strong); cursor: default; }
 .form-error { margin: 6px 0; color: var(--danger-muted); text-align: center; font-size: var(--font-size-10-5); }
 
 /* States */
 .state-screen { display: grid; place-items: center; align-content: center; padding-bottom: 40px; text-align: center; }
 .state-screen h1 { margin: 16px 0 4px; font-size: var(--font-size-27); }
 .state-screen p { max-width: 270px; color: var(--muted); font-size: var(--font-size-12); line-height: 1.45; }
-.logo-mark { width: 65px; height: 65px; border-radius: 22px; display: grid; place-items: center; color: var(--ref-color-138c55); background: var(--income-soft); }
+/* The loading/error mark is the closest thing the app has to showing its own icon,
+   so it is the logo's rounded lime tile with the ink glyph on it. */
+.logo-mark { width: 65px; height: 65px; border-radius: 22px; display: grid; place-items: center; color: var(--on-brand); background: var(--brand); }
 .logo-mark.error { color: var(--danger-error); background: var(--danger-soft); }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -1905,40 +1926,42 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .app-shell { min-height: calc(var(--app-vh) - 48px); border-radius: 32px; box-shadow: 0 22px 70px var(--ref-rgba-16-24-19-p12); }
 }
 
+/* Dark surfaces are the logo's ink diluted, not the reference's green-grey, so the
+   lime accents on top read as the same pairing the mark uses. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color: var(--ref-color-f3f5f3);
-    background: var(--ref-color-111411);
+    background: var(--logo-night);
     --ink: var(--ref-color-f3f5f3);
     --muted: var(--ref-color-949b95);
     --muted-strong: var(--ref-color-b7beb8);
-    --surface: var(--ref-color-1c201d);
-    --panel: var(--ref-color-272c28);
-    --panel-strong: var(--ref-color-343a35);
-    --panel-soft: var(--ref-color-202521);
-    --line: var(--ref-color-393f3a);
+    --surface: var(--logo-night-surface);
+    --panel: var(--logo-night-panel);
+    --panel-strong: var(--logo-night-panel-strong);
+    --panel-soft: var(--logo-night-panel-soft);
+    --line: var(--logo-night-line);
     --income-text: var(--ref-color-54e39c);
-    --frost: var(--ref-rgba-39-44-40-p82);
+    --frost: var(--logo-night-frost);
   }
 }
 :root[data-theme="dark"] {
   color: var(--ref-color-f3f5f3);
-  background: var(--ref-color-111411);
+  background: var(--logo-night);
   --ink: var(--ref-color-f3f5f3);
   --muted: var(--ref-color-949b95);
   --muted-strong: var(--ref-color-b7beb8);
-  --surface: var(--ref-color-1c201d);
-  --panel: var(--ref-color-272c28);
-  --panel-strong: var(--ref-color-343a35);
-  --panel-soft: var(--ref-color-202521);
-  --line: var(--ref-color-393f3a);
+  --surface: var(--logo-night-surface);
+  --panel: var(--logo-night-panel);
+  --panel-strong: var(--logo-night-panel-strong);
+  --panel-soft: var(--logo-night-panel-soft);
+  --line: var(--logo-night-line);
   --income-text: var(--ref-color-54e39c);
-  --frost: var(--ref-rgba-39-44-40-p82);
+  --frost: var(--logo-night-frost);
 }
 :root[data-theme="light"] {
-  color: var(--ref-color-171817);
+  color: var(--brand-ink);
   background: var(--ref-color-eef0ed);
-  --ink: var(--ref-color-171817);
+  --ink: var(--brand-ink);
   --muted: var(--ref-color-8b908c);
   --muted-strong: var(--ref-color-6b6b6b);
   --surface: var(--ref-color-fff);
@@ -1957,20 +1980,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 :root[data-theme="dark"] .glass,
 :root[data-theme="dark"] .close-orb,
 :root[data-theme="dark"] .action-orb,
-:root[data-theme="dark"] .overlay-right { background: var(--ref-rgba-39-44-40-p94); }
+:root[data-theme="dark"] .overlay-right { background: var(--logo-night-glass); }
 :root[data-theme="dark"] .workspace-picker strong,
 :root[data-theme="dark"] .account-pill.static strong { color: var(--ref-color-f3f5f3); }
-:root[data-theme="dark"] .insights-screen { background: radial-gradient(circle at 40% 0%, var(--ref-color-183c2b) 0, var(--ref-color-1c201d) 45%); }
+:root[data-theme="dark"] .insights-screen { background: radial-gradient(circle at 40% 0%, var(--logo-night-insight) 0, var(--logo-night-surface) 45%); }
 :root[data-theme="dark"] .field input,
 :root[data-theme="dark"] .field select,
 :root[data-theme="dark"] .draft-input,
 :root[data-theme="dark"] .category-create select,
 :root[data-theme="dark"] .category-create input,
-  :root[data-theme="dark"] .invite-link { color: var(--ref-color-f3f5f3); border-color: var(--ref-color-3a403b); background: var(--ref-color-202521); }
+  :root[data-theme="dark"] .invite-link { color: var(--ref-color-f3f5f3); border-color: var(--logo-night-line); background: var(--logo-night-panel-soft); }
 :root[data-theme="dark"] .category-type-switch,
-:root[data-theme="dark"] .category-search { background: var(--ref-rgba-39-44-40-p92); }
-:root[data-theme="dark"] .category-parent-select { border-color: var(--ref-color-535a54); }
-:root[data-theme="dark"] .category-save { color: var(--ref-color-171817); background: var(--ref-color-f2f4f2); }
+:root[data-theme="dark"] .category-search { background: var(--logo-night-glass); }
+:root[data-theme="dark"] .category-parent-select { border-color: var(--logo-night-line); }
 
 /* Telegram supplies its own chrome: no rounded desktop frame, no extra top inset. */
 :root.in-telegram body { padding: 0; }
@@ -2204,7 +2226,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .insight-tiles article.stacked small { margin-top: 0; color: var(--ink); font-size: var(--font-size-13); font-weight: var(--font-weight-semibold); }
 .insight-tiles article.stacked > strong { margin: 6px 0 0; padding-top: 0; }
 .insight-tiles article.warm { background: radial-gradient(120% 88% at 78% 108%, var(--ref-color-f9e2ce) 0%, var(--expense-glow) 38%, var(--panel) 78%); }
-.insight-tiles article.mint { background: radial-gradient(120% 88% at 50% 104%, var(--ref-color-cfeedf) 0%, var(--income-glow) 40%, var(--panel) 80%); }
+.insight-tiles article.lime { background: radial-gradient(120% 88% at 50% 104%, var(--brand-soft) 0%, var(--brand-wash) 40%, var(--panel) 80%); }
 .insight-tiles article.stacked > strong.green { color: var(--ref-color-04c268); }
 .insight-tiles article.stacked > strong.warm { color: var(--expense-chart); }
 
@@ -2283,7 +2305,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .automation-links code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: var(--font-size-11); }
 .automation-links button svg { width: 18px; height: 18px; }
 
-:root[data-theme="dark"] .automation-links button { background: var(--ref-color-303632); }
+:root[data-theme="dark"] .automation-links button { background: var(--logo-night-panel-strong); }
 
 @media (prefers-reduced-motion: reduce) {
   .settings-subscreen { animation: scrim-in var(--motion-reduced) ease both; }
@@ -2331,7 +2353,7 @@ button:active:not(:disabled),
 /* Money tiles carry the direction of what they report. Kept faint so the grid still
    reads as one surface rather than a traffic light. */
 .insight-tiles article.sign-out { background: linear-gradient(178deg, var(--panel) 58%, var(--expense-sign-soft) 100%); }
-.insight-tiles article.sign-in { background: linear-gradient(178deg, var(--panel) 58%, var(--income-sign-soft) 100%); }
+.insight-tiles article.sign-in { background: linear-gradient(178deg, var(--panel) 58%, var(--brand-glow) 100%); }
 
 /* Tiles answer a tap the way the buttons do. */
 .insight-tiles article {
@@ -2348,27 +2370,27 @@ button:active:not(:disabled),
 }
 
 /* --- the wash behind the balance ------------------------------------------ */
-/* One green wash across the top, the colour the screen has always had. The only
-   movement is the gradient sliding very slowly, which reads as the colour
+/* One wash across the top, now in the brand lime rather than the reference's mint.
+   The only movement is the gradient sliding very slowly, which reads as the colour
    breathing rather than as something animating. */
 .insights-screen {
-  --mood-top: var(--ref-color-e1f6ed);
-  --mood-mid: var(--ref-color-ecfbf4);
+  --mood-top: var(--logo-lime-mood);
+  --mood-mid: var(--brand-wash);
   /* Stops are in px, not %. The sheet is as tall as the transaction list it
      contains - measured at 1517px against an 874px viewport - so percentage
      stops stretched the wash over the whole scroll height and the visible top
-     never got past the first colour. The reference resolves the wash within
-     220pt and settles on var(--ref-color-fafefd) rather than pure white. */
-  background-color: var(--ref-color-fafefd);
+     never got past the first colour. The wash resolves within
+     220pt and settles just short of pure white, as the reference does. */
+  background-color: var(--logo-lime-settle);
   background-image: linear-gradient(
     180deg,
     var(--mood-top) 0px,
     var(--mood-top) 50px,
     var(--mood-mid) 85px,
-    var(--ref-color-effcf5) 100px,
-    var(--ref-color-f2fdf9) 130px,
-    var(--ref-color-f8fefc) 170px,
-    var(--ref-color-fafefd) 218px
+    var(--brand-glow) 100px,
+    var(--logo-lime-mist) 130px,
+    var(--logo-lime-haze) 170px,
+    var(--logo-lime-settle) 218px
   );
   background-size: 100% calc(100% + 20px);
   background-repeat: no-repeat;
