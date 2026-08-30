@@ -220,7 +220,7 @@ function AutomationsScreen({ motion, onBack, notify }: { motion: string; onBack(
             {!copied && <button className="shortcut-stage-copy" type="button" onClick={() => void copy()}><Copy />Скопировать ключ</button>}
             {copied && <div className="shortcut-stage-status"><Check />Ключ скопирован</div>}
             {copied
-              ? <a className="shortcut-stage-primary" href={`shortcuts://import-shortcut/?name=Lomme&url=${encodeURIComponent(new URL('/shortcuts/Lomme.shortcut', window.location.origin).href)}`}><Download />Открыть в «Командах»</a>
+              ? <a className="shortcut-stage-primary" href="/shortcut/install"><Download />Открыть в «Командах»</a>
               : <button className="shortcut-stage-primary" type="button" disabled><Download />Открыть в «Командах»</button>}
             <p className="shortcut-stage-hint">Откроется готовая команда Apple. Нажми «Добавить команду» и вставь скопированный ключ.</p>
           </section>

@@ -37,12 +37,7 @@ declare module 'fastify' {
 }
 
 const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
-// The command lives in this release, rather than behind a manually published
-// iCloud URL. That keeps the Shortcut the user installs in sync with the code
-// that generated it.
-const SHORTCUT_FILE_NAME = 'Lomme.shortcut'
-const SHORTCUT_DOWNLOAD_URL = `https://lomme-production.up.railway.app/shortcuts/${SHORTCUT_FILE_NAME}`
-const SHORTCUT_IMPORT_URL = `shortcuts://import-shortcut/?name=Lomme&url=${encodeURIComponent(SHORTCUT_DOWNLOAD_URL)}`
+const DEFAULT_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/1918b5bf45984ac48eccee6397ac0a6c'
 
 function telegramInitMaxAgeSeconds() {
   const configured = Number(process.env.TELEGRAM_INIT_MAX_AGE_SECONDS)
@@ -68,6 +63,15 @@ function allowedCorsOrigins() {
     }
   }
   return origins
+}
+
+function shortcutIcloudUrl() {
+  const configured = process.env.VITE_SHORTCUT_ICLOUD_URL?.trim() || DEFAULT_SHORTCUT_ICLOUD_URL
+  try {
+    const url = new URL(configured)
+    if (url.protocol === 'https:' && url.hostname === 'www.icloud.com' && url.pathname.startsWith('/shortcuts/')) return url.href
+  } catch { /* fall back to the published Lomme shortcut */ }
+  return DEFAULT_SHORTCUT_ICLOUD_URL
 }
 
 export function shortcutErrorText(code: string) {
@@ -172,12 +176,10 @@ export async function buildApp(store: FinanceStore) {
     return reply.send({ ok: true, service: 'lomme', ...state, now: new Date().toISOString() })
   })
 
-  // A normal same-origin anchor is reliable in Telegram's iOS WebView even
-  // when its web_app_open_link bridge silently drops an otherwise valid tap.
-  // Hand the signed template to the native Shortcuts importer. Serving a
-  // .shortcut directly in Telegram's WebView renders the binary as text.
+  // Keep the tap on a normal same-origin HTTPS link so Telegram's iOS WebView
+  // accepts it, then hand off through Apple's published Shortcut page.
   app.get('/shortcut/install', async (_request, reply) =>
-    reply.header('Cache-Control', 'no-store').redirect(SHORTCUT_IMPORT_URL))
+    reply.header('Cache-Control', 'no-store').redirect(shortcutIcloudUrl()))
 
   app.post('/api/v1/auth/telegram', async (request, reply) => {
     const input = parse(authTelegramSchema, request.body)
