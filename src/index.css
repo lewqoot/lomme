@@ -1074,6 +1074,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .analytics-data { min-height: 360px; animation: analytics-swap var(--motion-select) var(--ease-out) both; }
 .analytics-visual { animation: analytics-swap var(--motion-select) var(--ease-out) both; }
+/* Recharts marks its own surface and every series layer focusable for its keyboard
+   accessibility layer, so a tap on the chart leaves WebKit drawing its focus ring -
+   a blue box around the whole chart, or around the bounding box of one series.
+   Nothing in here is keyboard-operated inside Telegram, so the ring is only noise. */
+.analytics-visual :focus, .analytics-visual :focus-visible { outline: none; }
 .analytics-list { animation: analytics-swap var(--motion-select) var(--ease-out) 70ms both; }
 
 .analytics-donut { position: relative; margin: 30px -6px 0; }
@@ -1130,26 +1135,34 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .analytics-list > button.muted > span:not(.analytics-bar) { color: var(--muted); }
 .analytics-list > button.muted .analytics-bar { opacity: .45; }
 
-/* Not a label but a bar: its width encodes the category's share of the largest row,
-   measured off the reference as a track inset 7pt from each row edge. */
+/* Not a label but a bar: its width encodes the category's share of the total,
+   measured off the reference as a track inset 7pt from each row edge, 29pt tall.
+   It is free to be narrower than the name it carries - in the reference a 50 ₽ row
+   is a bare sliver with its label spilling out to the right, and reading the column
+   as a chart depends on that. The label is a separate layer for the same reason. */
 .analytics-bar {
   position: absolute;
   left: 7px;
   top: 50%;
   translate: 0 -50%;
-  width: max(fit-content, calc((100% - 14px) * var(--bar, 0)));
+  width: calc((100% - 14px) * var(--bar, 0));
   max-width: calc(100% - 14px);
-  min-width: 34px;
-  padding: 6px 10px;
+  min-width: 6px;
+  height: 29px;
   border-radius: 999px;
+  transition: width .22s var(--ease-out), opacity .16s ease;
+}
+.analytics-bar-label {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  translate: 0 -50%;
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: var(--font-size-11);
   font-weight: var(--font-weight-emphasis);
   white-space: nowrap;
-  overflow: visible;
-  transition: width .22s var(--ease-out), opacity .16s ease;
 }
 .analytics-bar svg { width: 16px; height: 16px; flex: 0 0 auto; stroke-width: 2; }
 
@@ -1691,15 +1704,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .editor-type-switch svg { width: 16px; }
 .editor-type-switch > strong { padding: 0 8px; font-size: var(--font-size-11); }
 .reference-amount { flex: 1 1 auto; min-height: 120px; display: grid; place-items: center; }
-/* Tabular figures keep every digit one `ch` wide, so typing 1 after 5 never resizes
-   the number under the finger - and the leaving animation can size itself in `ch`. */
+/* Tabular figures keep every digit the same width, so typing 1 after 5 never resizes
+   the number under the finger. */
 .reference-amount strong {
-  --amount-tracking: -.9px;
   position: relative;
   font-size: var(--font-size-49);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
-  letter-spacing: var(--amount-tracking);
+  letter-spacing: -.9px;
 }
 .reference-amount.expense strong { color: var(--expense); }
 .reference-amount.income strong { color: var(--income); }
@@ -2139,15 +2151,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   will-change: transform, opacity;
   animation: digit-in var(--motion-digit) var(--ease-out) both;
 }
-/* Figures here are tabular, so a character occupies exactly one `ch` plus the
-   tracking that follows it: the fragment starts at the width it really had. It also
-   holds `max-width: 0` after the animation, so React dropping the node later costs
-   no layout at all. */
-.reference-amount strong i.leaving {
-  --leaving-span: calc(var(--leaving-count, 1) * (1ch + var(--amount-tracking)));
-  overflow: hidden;
-  animation: digit-out var(--motion-digit) var(--ease-glide) both;
-}
+/* The fragment holds still at its natural width for the one frame it takes App.tsx
+   to measure it, then collapses from exactly that width - a `ch`-based guess started
+   half a pixel short and twitched. It also holds `max-width: 0` after the animation,
+   so React dropping the node later costs no layout at all. */
+.reference-amount strong i.leaving { overflow: hidden; }
+.reference-amount strong i.leaving.armed { animation: digit-out var(--motion-digit) var(--ease-glide) both; }
 /* A digit that was replaced rather than trimmed - the 0 the first keypress writes
    over - already has its successor standing in the same place. Holding a width for
    it would widen the number for the length of the animation and shove the rest of

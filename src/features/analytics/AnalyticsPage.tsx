@@ -133,7 +133,10 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
               onClick={() => toggle(item.key)}
             >
               <span className="analytics-bar" style={{ ...barStyle(item.color), '--bar': item.amountKopecks / Math.max(1, grandTotalKopecks) } as CSSProperties}>
-                {glyph(item.icon)}{item.name}
+                {/* The label rides on top of the bar rather than inside it: the bar is
+                    free to be narrower than its own name, which is what a 50 ₽ row
+                    looks like in the reference. */}
+                <span className="analytics-bar-label">{glyph(item.icon)}{item.name}</span>
               </span>
               <span>{money(item.amountKopecks)}</span>
               <Tick on={item.included} />
