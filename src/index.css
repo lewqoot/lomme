@@ -1136,7 +1136,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .analytics-list > button.muted .analytics-bar { opacity: .45; }
 
 /* Not a label but a bar: its width encodes the category's share of the total,
-   measured off the reference as a track inset 7pt from each row edge, 29pt tall.
+   measured off the reference as a track inset 7pt from each row edge, 32pt tall -
+   the row is 51.6pt, with 9.7pt of panel left showing above and below.
    It is free to be narrower than the name it carries - in the reference a 50 ₽ row
    is a bare sliver with its label spilling out to the right, and reading the column
    as a chart depends on that. The label is a separate layer for the same reason. */
@@ -1148,7 +1149,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   width: calc((100% - 14px) * var(--bar, 0));
   max-width: calc(100% - 14px);
   min-width: 6px;
-  height: 29px;
+  height: 32px;
   border-radius: 999px;
   transition: width .22s var(--ease-out), opacity .16s ease;
 }
