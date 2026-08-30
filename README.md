@@ -39,6 +39,10 @@ npm test
 npm run build
 ```
 
+## Разработка несколькими агентами
+
+GitHub — единственная точка координации: [roadmap и порядок работ](https://github.com/lewqoot/lomme/issues/8). Перед правкой нужно подтянуть актуальный `main`, выбрать один issue и работать в отдельной ветке `fix/<issue>-short-name`. Общие правила находятся в [`AGENTS.md`](./AGENTS.md).
+
 ## Railway
 
 `railway.json` описывает сборку, pre-deploy миграции, запуск и `/healthz`. Для напоминаний создаётся второй сервис с командой `npm run worker` и cron `*/5 * * * *`.

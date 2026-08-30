@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { subscribeToForeground } from '../src/lib/foreground-sync.js'
+import { SNAPSHOT_POLL_INTERVAL_MS, subscribeToForeground } from '../src/lib/foreground-sync.js'
 
 describe('обновление после нативной команды', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('использует минутный polling только как страховку', () => {
+    expect(SNAPSHOT_POLL_INTERVAL_MS).toBe(60_000)
+  })
 
   it('обновляет данные при возврате в Telegram и снимает все слушатели', () => {
     const windowHandlers = new Map<string, EventListener>()

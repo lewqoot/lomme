@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../server/app.js'
 import { createTelegramInitDataForTest, type TelegramIdentity } from '../server/auth/telegram.js'
 import { MemoryFinanceStore } from '../server/store/memory.js'
@@ -45,6 +45,28 @@ describe('защита сервера', () => {
     expect(limited.statusCode).toBe(429)
     expect(limited.json().error.code).toBe('RATE_LIMITED')
     expect(limited.headers['retry-after']).toBeDefined()
+    await app.close()
+  })
+
+  it('не проверяет сессию ради статического файла', async () => {
+    process.env.NODE_ENV = 'test'
+    process.env.ALLOW_DEV_AUTH = 'true'
+    const store = new MemoryFinanceStore()
+    const sessionLookup = vi.spyOn(store, 'userForSession')
+    const app = await buildApp(store)
+    const auth = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/telegram',
+      payload: { initData: '', timezone: 'Europe/Moscow' },
+    })
+    const raw = auth.headers['set-cookie']!
+    const cookie = (Array.isArray(raw) ? raw[0]! : raw).split(';')[0]
+    sessionLookup.mockClear()
+
+    const response = await app.inject({ method: 'GET', url: '/favicon.svg', headers: { cookie } })
+
+    expect(response.statusCode).toBe(200)
+    expect(sessionLookup).not.toHaveBeenCalled()
     await app.close()
   })
 

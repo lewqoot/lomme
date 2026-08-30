@@ -26,7 +26,7 @@ import { SettingsPage } from './features/settings/SettingsPage'
 import { SearchPage } from './features/search/SearchPage'
 import { useElasticOverscroll } from './features/motion/useElasticOverscroll'
 import { defaultPeriod, periodKey, resolvePeriod, trendGranularity, type PeriodSelection } from './features/period/model'
-import { subscribeToForeground } from './lib/foreground-sync'
+import { SNAPSHOT_POLL_INTERVAL_MS, subscribeToForeground } from './lib/foreground-sync'
 import { DATA_COLORS, UI_COLORS } from './shared/design-tokens'
 
 // Recharts is by far the heaviest dependency and the home screen never plots
@@ -111,7 +111,7 @@ export default function App() {
     // another device. Keep visible clients close to real time without polling in
     // the background. Returning from the native Shortcuts app is handled below
     // and refreshes immediately.
-    refetchInterval: pendingDeleteCount || journalExpanded ? false : 4_000,
+    refetchInterval: pendingDeleteCount || journalExpanded ? false : SNAPSHOT_POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
     refetchOnReconnect: 'always',
     refetchOnWindowFocus: 'always',
