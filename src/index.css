@@ -329,8 +329,12 @@
   --tile-radius: 12px;
   --ease-out: cubic-bezier(.32, .72, 0, 1);
   --ease-in: cubic-bezier(.4, 0, .68, .28);
+  /* --ease-out spends three quarters of its distance in the first quarter of the
+     time, which reads as a snap on anything that also moves the layout. */
+  --ease-glide: cubic-bezier(.33, 1, .68, 1);
   --motion-micro: 160ms;
   --motion-select: 220ms;
+  --motion-digit: 200ms;
   --motion-sheet: 440ms;
   --motion-sheet-exit: 360ms;
   --motion-reduced: 120ms;
@@ -1685,7 +1689,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .editor-type-switch svg { width: 16px; }
 .editor-type-switch > strong { padding: 0 8px; font-size: var(--font-size-11); }
 .reference-amount { flex: 1 1 auto; min-height: 120px; display: grid; place-items: center; }
-.reference-amount strong { font-size: var(--font-size-49); font-weight: var(--font-weight-semibold); letter-spacing: -.9px; }
+/* Tabular figures keep every digit one `ch` wide, so typing 1 after 5 never resizes
+   the number under the finger - and the leaving animation can size itself in `ch`. */
+.reference-amount strong {
+  --amount-tracking: -.9px;
+  position: relative;
+  font-size: var(--font-size-49);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--amount-tracking);
+}
 .reference-amount.expense strong { color: var(--expense); }
 .reference-amount.income strong { color: var(--income); }
 .transaction-meta {
@@ -2102,26 +2115,55 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 /* Typed digits drop into place one by one, the way the reference keypad reads. */
-/* Only transform and opacity: both are composited, so the number never repaints
-   mid-animation. A part-opaque black already reads as the reference's grey. */
+/* Transform and opacity are composited, so a settled number never repaints. A
+   part-opaque black already reads as the reference's grey. */
 @keyframes digit-in {
   from { transform: translate(.1em, .3em) scale(.6); opacity: 0; }
   60% { opacity: .35; }
   to { transform: none; opacity: 1; }
 }
+/* The one laid-out property in here is the width of the fragment being deleted, and
+   collapsing it is the whole point: the amount is centred, so a digit that vanishes
+   the instant its node is dropped snaps the rest of the number sideways by half its
+   width. Shrinking the gap it leaves lets the number glide into its new centre. */
 @keyframes digit-out {
-  from { transform: none; opacity: 1; }
+  from { max-width: var(--leaving-span); transform: none; opacity: 1; }
   40% { opacity: .35; }
-  to { transform: translate(.1em, .3em) scale(.6); opacity: 0; }
+  to { max-width: 0; transform: translate(.1em, .3em) scale(.6); opacity: 0; }
 }
 .reference-amount strong i {
   display: inline-block;
   font-style: normal;
   will-change: transform, opacity;
-  animation: digit-in .18s var(--ease-out) both;
+  animation: digit-in var(--motion-digit) var(--ease-out) both;
 }
-.reference-amount strong i.leaving { animation: digit-out .15s var(--ease-out) both; }
-@media (prefers-reduced-motion: reduce) { .reference-amount strong i { animation: none; } }
+/* Figures here are tabular, so a character occupies exactly one `ch` plus the
+   tracking that follows it: the fragment starts at the width it really had. It also
+   holds `max-width: 0` after the animation, so React dropping the node later costs
+   no layout at all. */
+.reference-amount strong i.leaving {
+  --leaving-span: calc(var(--leaving-count, 1) * (1ch + var(--amount-tracking)));
+  overflow: hidden;
+  animation: digit-out var(--motion-digit) var(--ease-glide) both;
+}
+/* A digit that was replaced rather than trimmed - the 0 the first keypress writes
+   over - already has its successor standing in the same place. Holding a width for
+   it would widen the number for the length of the animation and shove the rest of
+   it sideways, so it leaves out of flow, from exactly where it stood. */
+@keyframes digit-swap {
+  from { transform: none; opacity: 1; }
+  40% { opacity: .35; }
+  to { transform: translate(.1em, .3em) scale(.6); opacity: 0; }
+}
+.reference-amount strong i.leaving.replaced {
+  position: absolute;
+  overflow: visible;
+  animation-name: digit-swap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reference-amount strong i { animation: none; }
+  .reference-amount strong i.leaving { display: none; }
+}
 
 /* Drawn tile behind the Insights button during the pull. */
 .pull-shape {

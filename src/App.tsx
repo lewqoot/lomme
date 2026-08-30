@@ -756,30 +756,51 @@ function TransactionEditor({ data, state, closing, onClose, onSaved, onDelete }:
 }
 
 
+/** Matches --motion-digit, plus enough slack that the node is never dropped mid-flight. */
+const DIGIT_MOTION_MS = 260
+
 /**
  * Typed digits arrive from below-right, small and grey, then settle into place.
  * Deleted digits leave the same way, so a removed character is not just cut.
+ *
+ * Whatever the two values stop sharing is what leaves, which covers more than a
+ * backspace: clearing 555 back to 0, or typing over a folded result, both replace
+ * digits rather than trim them, and used to blink out with no animation at all. The
+ * fragment leaves from where it actually stood, so the digits around it never
+ * reshuffle.
  */
 function AmountDigits({ value }: { value: string }) {
-  const [leaving, setLeaving] = useState('')
+  const [leaving, setLeaving] = useState<{ text: string; at: number; run: number; replaced: boolean } | null>(null)
   const previous = useRef(value)
+  const run = useRef(0)
+  const timer = useRef(0)
+
+  useEffect(() => () => window.clearTimeout(timer.current), [])
 
   useEffect(() => {
     const before = previous.current
     previous.current = value
-    if (before.length > value.length && before.startsWith(value)) {
-      setLeaving(before.slice(value.length))
-      const id = window.setTimeout(() => setLeaving(''), 150)
-      return () => window.clearTimeout(id)
-    }
-    // Skip the state write when nothing is leaving: it used to force a second
-    // render on every keypress.
-    setLeaving((current) => (current ? '' : current))
+    if (before === value) return
+    let shared = 0
+    while (shared < before.length && shared < value.length && before[shared] === value[shared]) shared += 1
+    const removed = before.slice(shared)
+    // Nothing left the number, so leave any fragment still in flight alone: cutting
+    // it short here is what made typing straight after a delete jump.
+    if (!removed) return
+    run.current += 1
+    setLeaving({ text: removed, at: shared, run: run.current, replaced: value.length > shared })
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setLeaving(null), DIGIT_MOTION_MS)
   }, [value])
 
+  const chars = [...value]
+  const at = leaving ? Math.min(leaving.at, chars.length) : chars.length
   return <>
-    {[...value].map((char, index) => <i key={`${index}-${char}`}>{char}</i>)}
-    {leaving && <i key="leaving" className="leaving">{leaving}</i>}
+    {chars.slice(0, at).map((char, index) => <i key={`${index}-${char}`}>{char}</i>)}
+    {/* Keyed by run so a second delete inside the first one restarts the animation
+        instead of silently reusing a node that has already collapsed. */}
+    {leaving && <i key={`leaving-${leaving.run}`} className={`leaving${leaving.replaced ? ' replaced' : ''}`} style={{ '--leaving-count': leaving.text.length } as CSSProperties}>{leaving.text}</i>}
+    {chars.slice(at).map((char, index) => <i key={`${at + index}-${char}`}>{char}</i>)}
   </>
 }
 
