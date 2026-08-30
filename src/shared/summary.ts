@@ -66,6 +66,13 @@ export function calculateSummary(
 
   const cutoff = now < end ? now : end
   const elapsedDays = Math.max(1, zonedDayNumber(cutoff, timeZone) - zonedDayNumber(start, timeZone) + 1)
+  const firstObservedDay = allPeriodTransactions
+    .map((transaction) => zonedDayNumber(new Date(transaction.occurredAt), timeZone))
+    .filter((day) => day <= zonedDayNumber(cutoff, timeZone))
+    .reduce<number | null>((first, day) => first === null || day < first ? day : first, null)
+  const observedDayCount = firstObservedDay === null
+    ? 0
+    : Math.max(0, zonedDayNumber(cutoff, timeZone) - firstObservedDay + 1)
   const expenses = periodTransactions.filter((transaction) => transaction.type === 'expense')
   const incomes = periodTransactions.filter((transaction) => transaction.type === 'income')
   const largestExpense = expenses.reduce<TransactionView | null>((best, item) =>
@@ -87,11 +94,13 @@ export function calculateSummary(
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0] ?? []
   let expenseFreeStreakDays = 0
   let currentExpenseFreeStreakDays = 0
-  const firstDay = zonedDayNumber(start, timeZone)
+  const firstDay = firstObservedDay
   const lastDay = zonedDayNumber(cutoff, timeZone)
-  for (let day = firstDay; day <= lastDay; day += 1) {
-    currentExpenseFreeStreakDays = spentDayNumbers.has(day) ? 0 : currentExpenseFreeStreakDays + 1
-    expenseFreeStreakDays = Math.max(expenseFreeStreakDays, currentExpenseFreeStreakDays)
+  if (firstDay !== null) {
+    for (let day = firstDay; day <= lastDay; day += 1) {
+      currentExpenseFreeStreakDays = spentDayNumbers.has(day) ? 0 : currentExpenseFreeStreakDays + 1
+      expenseFreeStreakDays = Math.max(expenseFreeStreakDays, currentExpenseFreeStreakDays)
+    }
   }
 
   return {
@@ -99,6 +108,7 @@ export function calculateSummary(
     periodEnd: end.toISOString(),
     granularity: byMonth ? 'month' : 'day',
     elapsedDays,
+    observedDayCount,
     netKopecks: incomeKopecks - expenseKopecks,
     incomeKopecks,
     expenseKopecks,

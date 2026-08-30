@@ -153,6 +153,7 @@ export class PostgresFinanceStore implements FinanceStore {
           WHERE type='expense' AND EXTRACT(ISODOW FROM occurred_at AT TIME ZONE $4) IN (6,7)
         ),0) AS weekend_expense,
         COUNT(*) AS operation_count,
+        MIN(to_char(occurred_at AT TIME ZONE $4,'YYYY-MM-DD')) AS first_observed_day,
         ARRAY(SELECT DISTINCT to_char(item.occurred_at AT TIME ZONE $4,'YYYY-MM-DD') FROM period item WHERE item.type='expense') AS expense_days
       FROM period`, [activeWorkspaceId, window.start, window.end, currentUser.timezone, scopedAccountIds]),
       this.pool.query(`SELECT t.type,t.category_id,COALESCE(c.name,'Без категории') AS name,
@@ -567,6 +568,11 @@ function summaryFromSql(
   const expenseKopecks = Number(totals.expense)
   const cutoff = new Date() < range.end ? new Date() : range.end
   const elapsedDays = Math.max(1, zonedDayNumber(cutoff, timeZone) - zonedDayNumber(range.start, timeZone) + 1)
+  const firstObservedDay = typeof totals.first_observed_day === 'string'
+    ? dayNumberFromKey(totals.first_observed_day)
+    : null
+  const lastDay = zonedDayNumber(cutoff, timeZone)
+  const observedDayCount = firstObservedDay === null ? 0 : Math.max(0, lastDay - firstObservedDay + 1)
   const categoryItems = categories.map((row) => ({
     categoryId: row.category_id as string | null,
     name: row.name as string,
@@ -585,17 +591,18 @@ function summaryFromSql(
   }))
   let expenseFreeStreakDays = 0
   let currentExpenseFreeStreakDays = 0
-  const firstDay = zonedDayNumber(range.start, timeZone)
-  const lastDay = zonedDayNumber(cutoff, timeZone)
-  for (let day = firstDay; day <= lastDay; day += 1) {
-    currentExpenseFreeStreakDays = expenseDays.has(day) ? 0 : currentExpenseFreeStreakDays + 1
-    expenseFreeStreakDays = Math.max(expenseFreeStreakDays, currentExpenseFreeStreakDays)
+  if (firstObservedDay !== null) {
+    for (let day = firstObservedDay; day <= lastDay; day += 1) {
+      currentExpenseFreeStreakDays = expenseDays.has(day) ? 0 : currentExpenseFreeStreakDays + 1
+      expenseFreeStreakDays = Math.max(expenseFreeStreakDays, currentExpenseFreeStreakDays)
+    }
   }
   return {
     periodStart: range.start.toISOString(),
     periodEnd: range.end.toISOString(),
     granularity: byMonth ? 'month' : 'day',
     elapsedDays,
+    observedDayCount,
     netKopecks: incomeKopecks - expenseKopecks,
     incomeKopecks,
     expenseKopecks,
@@ -614,4 +621,9 @@ function summaryFromSql(
     byCategory: categoryItems,
     trend: trend.map((row) => ({ date: row.bucket as string, incomeKopecks: Number(row.income), expenseKopecks: Number(row.expense) })),
   }
+}
+
+function dayNumberFromKey(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return Date.UTC(year!, month! - 1, day!) / 86_400_000
 }
