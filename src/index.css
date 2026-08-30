@@ -279,6 +279,7 @@
   --font-size-43: 43px;
   --font-size-49: 49px;
   --font-size-clamp-19-6-2vw-25: clamp(19px, 6.2vw, 25px);
+  --font-size-clamp-16-4-8vw-25: clamp(16px, 4.8vw, 25px);
   --font-weight-book: 450;
   --font-weight-medium: 500;
   --font-weight-balance: 510;
@@ -857,7 +858,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    the title, as the reference does. */
 .insight-tiles h3 .tile-category { width: 36px; height: 36px; flex: 0 0 auto; align-self: flex-start; }
 .insight-tiles h3 .tile-category svg { width: 19px; height: 19px; }
-.insight-tiles > article > strong { max-width: 100%; margin: auto 0 0 auto; padding-top: 10px; font-size: var(--font-size-clamp-19-6-2vw-25); font-weight: var(--font-weight-bold); letter-spacing: -.5px; overflow-wrap: anywhere; }
+.insight-tiles > article > strong { max-width: 100%; margin: auto 0 0 auto; padding-top: 10px; font-size: var(--font-size-clamp-16-4-8vw-25); font-weight: var(--font-weight-bold); letter-spacing: -.5px; white-space: nowrap; overflow-wrap: normal; }
 .insight-tiles > article > strong.green { color: var(--income-text); }
 .insight-tiles > article > strong.warm { color: var(--expense); }
 .insight-tiles > article > strong.muted { color: var(--ref-color-a8a8a8); }
@@ -1690,7 +1691,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .transaction-meta {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(8px, 1fr) 113px 47px;
+  grid-template-columns: minmax(8px, 1fr) minmax(113px, 142px) 47px;
   gap: 2px;
 }
 .transaction-meta > label, .currency-pill {
@@ -1716,7 +1717,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .transaction-meta p strong, .transaction-meta p small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .transaction-meta p small { margin-top: 3px; color: var(--muted); font-size: var(--font-size-9); }
 .transaction-meta select, .date-pill input { position: absolute; inset: 0; width: 100%; opacity: 0; }
-.date-pill span { font-size: var(--font-size-10-5); white-space: nowrap; }
+.date-pill > svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--muted); }
+.date-pill span { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--font-size-10-5); white-space: nowrap; }
 .currency-pill { font-size: var(--font-size-18); }
 .reference-note {
   width: 100%;
