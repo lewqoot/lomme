@@ -318,6 +318,7 @@
   /* Shared metrics of the pill language the reference is built on. */
   --gutter: 11px;
   --pill-h: 40px;
+  --touch-target: 44px;
   /* Pitch stays at 53 (matches the reference); the row takes more of it and the
      gap becomes a thin seam, the way the original reads. */
   --row-h: 50px;
@@ -489,8 +490,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   box-shadow: var(--shadow);
 }
 .header-actions button {
-  width: 44px;
-  height: 44px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -500,6 +501,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .header-actions svg { width: 19px; height: 19px; stroke-width: 1.8; }
 .icon-button {
+  position: relative;
   width: var(--pill-h);
   height: var(--pill-h);
   padding: 0;
@@ -508,6 +510,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   display: grid;
   place-items: center;
   background: transparent;
+}
+.icon-button::before {
+  content: "";
+  position: absolute;
+  width: var(--touch-target);
+  height: var(--touch-target);
 }
 .icon-button svg { width: 19px; height: 19px; stroke-width: 1.8; }
 .glass { background: var(--frost); box-shadow: var(--shadow); }
@@ -779,8 +787,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .close-orb, .action-orb {
   flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -904,7 +912,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   color: var(--ref-color-4a4a4a);
   background: var(--panel);
 }
-.period-pill > button { width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; color: inherit; background: transparent; }
+.period-pill > button { width: var(--touch-target); height: var(--touch-target); padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; color: inherit; background: transparent; }
 .period-pill > button svg { width: 15px; height: 15px; stroke-width: 2.1; }
 .period-pill > button:disabled { opacity: .35; }
 .period-pill .period-label {
@@ -2332,8 +2340,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 /* While the card is up the screen underneath stays put, dims slightly, and remains inert. */
 .receding-under.peeking .home-layer.receding { transform: scale(.965); opacity: .5; transition: none; }
 
-/* The category name reads centred in its row, in both the manager and the picker. */
-.category-row-open > strong { text-align: center; }
+/* A stable left edge keeps names from jumping as the list is scanned. */
+.category-row-open > strong { text-align: left; }
 
 /* --- press feedback -------------------------------------------------------- */
 /* A tap should be felt: the surface lifts a little and lightens for a moment. */
