@@ -40,7 +40,7 @@ const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 // The command lives in this release, rather than behind a manually published
 // iCloud URL. That keeps the Shortcut the user installs in sync with the code
 // that generated it.
-const SHORTCUT_DOWNLOAD_PATH = '/shortcuts/Lomme%20%E2%80%94%20%D0%B7%D0%B0%D0%BF%D0%B8%D1%81%D0%B0%D1%82%D1%8C%20%D1%82%D1%80%D0%B0%D1%82%D1%83.shortcut'
+const SHORTCUT_FILE_NAME = 'Lomme — записать трату.shortcut'
 
 function telegramInitMaxAgeSeconds() {
   const configured = Number(process.env.TELEGRAM_INIT_MAX_AGE_SECONDS)
@@ -168,10 +168,10 @@ export async function buildApp(store: FinanceStore) {
 
   // A normal same-origin anchor is reliable in Telegram's iOS WebView even
   // when its web_app_open_link bridge silently drops an otherwise valid tap.
-  // Redirect to the signed template bundled with this exact app release, not
-  // an independent iCloud publication that can silently become stale.
+  // Serve the signed template bundled with this exact app release, not an
+  // independent iCloud publication that can silently become stale.
   app.get('/shortcut/install', async (_request, reply) =>
-    reply.header('Cache-Control', 'no-store').redirect(SHORTCUT_DOWNLOAD_PATH))
+    reply.header('Cache-Control', 'no-store').sendFile(`shortcuts/${SHORTCUT_FILE_NAME}`))
 
   app.post('/api/v1/auth/telegram', async (request, reply) => {
     const input = parse(authTelegramSchema, request.body)
@@ -431,12 +431,15 @@ export async function buildApp(store: FinanceStore) {
   })
 
   const webRoot = path.resolve(process.cwd(), 'dist')
-  if (existsSync(webRoot)) {
+  // Test runs do not build Vite first. Register the public folder there so the
+  // same install endpoint still returns the actual Shortcut binary.
+  const staticRoot = existsSync(webRoot) ? webRoot : path.resolve(process.cwd(), 'public')
+  if (existsSync(staticRoot)) {
     // Railway does not compress the assets that Fastify streams by itself.  On a
     // mobile connection the icon sprite was therefore a 145 KB late request,
     // even though the browser only needs about 28 KB of it when compressed.
     await app.register(fastifyStatic, {
-      root: webRoot,
+      root: staticRoot,
       prefix: '/',
       wildcard: false,
       setHeaders(response, filePath) {
@@ -447,6 +450,8 @@ export async function buildApp(store: FinanceStore) {
           response.header('Content-Type', 'application/octet-stream')
           response.header('Content-Disposition', `attachment; filename="Lomme-shortcut.shortcut"; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`)
           response.header('Access-Control-Allow-Origin', 'https://web.telegram.org')
+          response.header('Cache-Control', 'no-store')
+          return
         }
         if (inAssets) {
           // Vite fingerprints every file in /assets, so a deployed build can
@@ -461,12 +466,14 @@ export async function buildApp(store: FinanceStore) {
         }
       },
     })
-    app.setNotFoundHandler(async (request, reply) => {
-      if (request.url.startsWith('/api/') || request.url.startsWith('/assets/')) {
-        return reply.code(404).send(errorBody('NOT_FOUND', 'Маршрут не найден', request.id))
-      }
-      return reply.sendFile('index.html')
-    })
+    if (staticRoot === webRoot) {
+      app.setNotFoundHandler(async (request, reply) => {
+        if (request.url.startsWith('/api/') || request.url.startsWith('/assets/')) {
+          return reply.code(404).send(errorBody('NOT_FOUND', 'Маршрут не найден', request.id))
+        }
+        return reply.sendFile('index.html')
+      })
+    }
   }
 
   app.addHook('onClose', async () => store.close())
