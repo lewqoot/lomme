@@ -1,32 +1,15 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { buildApp } from '../server/app.js'
 import { MemoryFinanceStore } from '../server/store/memory.js'
 
 describe('установка команды на iPhone', () => {
-  const previous = process.env.VITE_SHORTCUT_ICLOUD_URL
-  afterEach(() => {
-    if (previous === undefined) delete process.env.VITE_SHORTCUT_ICLOUD_URL
-    else process.env.VITE_SHORTCUT_ICLOUD_URL = previous
-  })
-
-  it('нативная ссылка перенаправляет на опубликованную команду Apple', async () => {
-    process.env.VITE_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/1918b5bf45984ac48eccee6397ac0a6c'
+  it('нативная ссылка перенаправляет на подписанную команду из текущей версии Lomme', async () => {
     const app = await buildApp(new MemoryFinanceStore())
     const response = await app.inject({ method: 'GET', url: '/shortcut/install' })
     await app.close()
 
     expect(response.statusCode).toBe(302)
-    expect(response.headers.location).toBe('https://www.icloud.com/shortcuts/1918b5bf45984ac48eccee6397ac0a6c')
+    expect(response.headers.location).toBe('/shortcuts/Lomme%20%E2%80%94%20%D0%B7%D0%B0%D0%BF%D0%B8%D1%81%D0%B0%D1%82%D1%8C%20%D1%82%D1%80%D0%B0%D1%82%D1%83.shortcut')
     expect(response.headers['cache-control']).toBe('no-store')
-  })
-
-  it('не позволяет переменной увести кнопку с домена Apple', async () => {
-    process.env.VITE_SHORTCUT_ICLOUD_URL = 'https://example.com/not-a-shortcut'
-    const app = await buildApp(new MemoryFinanceStore())
-    const response = await app.inject({ method: 'GET', url: '/shortcut/install' })
-    await app.close()
-
-    expect(response.statusCode).toBe(302)
-    expect(response.headers.location).toContain('https://www.icloud.com/shortcuts/')
   })
 })

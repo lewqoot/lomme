@@ -37,7 +37,10 @@ declare module 'fastify' {
 }
 
 const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
-const DEFAULT_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/1918b5bf45984ac48eccee6397ac0a6c'
+// The command lives in this release, rather than behind a manually published
+// iCloud URL. That keeps the Shortcut the user installs in sync with the code
+// that generated it.
+const SHORTCUT_DOWNLOAD_PATH = '/shortcuts/Lomme%20%E2%80%94%20%D0%B7%D0%B0%D0%BF%D0%B8%D1%81%D0%B0%D1%82%D1%8C%20%D1%82%D1%80%D0%B0%D1%82%D1%83.shortcut'
 
 function telegramInitMaxAgeSeconds() {
   const configured = Number(process.env.TELEGRAM_INIT_MAX_AGE_SECONDS)
@@ -63,15 +66,6 @@ function allowedCorsOrigins() {
     }
   }
   return origins
-}
-
-function shortcutIcloudUrl() {
-  const configured = process.env.VITE_SHORTCUT_ICLOUD_URL?.trim() || DEFAULT_SHORTCUT_ICLOUD_URL
-  try {
-    const url = new URL(configured)
-    if (url.protocol === 'https:' && url.hostname === 'www.icloud.com' && url.pathname.startsWith('/shortcuts/')) return url.href
-  } catch { /* fall back to the published Lomme shortcut */ }
-  return DEFAULT_SHORTCUT_ICLOUD_URL
 }
 
 export function shortcutErrorText(code: string) {
@@ -174,9 +168,10 @@ export async function buildApp(store: FinanceStore) {
 
   // A normal same-origin anchor is reliable in Telegram's iOS WebView even
   // when its web_app_open_link bridge silently drops an otherwise valid tap.
-  // The public redirect contains no personal key or user data.
+  // Redirect to the signed template bundled with this exact app release, not
+  // an independent iCloud publication that can silently become stale.
   app.get('/shortcut/install', async (_request, reply) =>
-    reply.header('Cache-Control', 'no-store').redirect(shortcutIcloudUrl()))
+    reply.header('Cache-Control', 'no-store').redirect(SHORTCUT_DOWNLOAD_PATH))
 
   app.post('/api/v1/auth/telegram', async (request, reply) => {
     const input = parse(authTelegramSchema, request.body)
