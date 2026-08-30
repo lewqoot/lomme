@@ -1,0 +1,18 @@
+# Build output and local caches must not travel to Railway: uploading them made
+# `npm ci` fail with EBUSY on node_modules/.vite.
+node_modules
+dist
+dist-web
+dist-server
+dist-design
+.vite
+output
+tmp
+test-results
+playwright-report
+
+# Design-time material the server never reads.
+docs/screenshots
+/assets
+design-*.html
+.claude

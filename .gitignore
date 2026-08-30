@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-server
+dist-design
+dist-ssr
+dist-shortcut
+.env
+.railway
+playwright-report
+test-results
+*.local
+
+# Local agent workspaces and review artifacts
+.claude
+AGENTS.md
+AUDIT-*.md
+NEXT-SESSION.md
+output
+settings.png
+design-gallery.html
+design-compare.html
+assets
+docs/screenshots
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
