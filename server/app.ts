@@ -37,7 +37,7 @@ declare module 'fastify' {
 }
 
 const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
-const DEFAULT_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/1918b5bf45984ac48eccee6397ac0a6c'
+const DEFAULT_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/7904d226526a4e64ac8fa14599f065f5'
 
 function telegramInitMaxAgeSeconds() {
   const configured = Number(process.env.TELEGRAM_INIT_MAX_AGE_SECONDS)

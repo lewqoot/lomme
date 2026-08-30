@@ -11,13 +11,13 @@ describe('установка команды на iPhone', () => {
   })
 
   it('перенаправляет на опубликованную команду Apple', async () => {
-    process.env.VITE_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/1918b5bf45984ac48eccee6397ac0a6c'
+    process.env.VITE_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/7904d226526a4e64ac8fa14599f065f5'
     const app = await buildApp(new MemoryFinanceStore())
     const response = await app.inject({ method: 'GET', url: '/shortcut/install' })
     await app.close()
 
     expect(response.statusCode).toBe(302)
-    expect(response.headers.location).toBe('https://www.icloud.com/shortcuts/1918b5bf45984ac48eccee6397ac0a6c')
+    expect(response.headers.location).toBe('https://www.icloud.com/shortcuts/7904d226526a4e64ac8fa14599f065f5')
     expect(response.headers['cache-control']).toBe('no-store')
   })
 
