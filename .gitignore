@@ -28,7 +28,7 @@ output
 settings.png
 design-gallery.html
 design-compare.html
-assets
+/assets
 docs/screenshots
 
 # Editor directories and files

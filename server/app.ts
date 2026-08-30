@@ -74,15 +74,15 @@ function shortcutIcloudUrl() {
   return DEFAULT_SHORTCUT_ICLOUD_URL
 }
 
-function shortcutErrorText(code: string) {
+export function shortcutErrorText(code: string) {
   if (code === 'QUICK_KEY_INVALID' || code === 'QUICK_KEY_MISSING') {
-    return 'Команда устарела\nОткрой Lomme → Настройки → Быстрый ввод → Настроить заново.'
+    return '🔑 Ключ больше не работает\nОткрой Lomme → Настройки → Быстрый ввод'
   }
   if (code === 'QUICK_AMOUNT_INVALID' || code === 'VALIDATION_ERROR') {
-    return 'Не удалось распознать трату\nВведи, например: 1250 такси.'
+    return '🤔 Не нашёл сумму\nНапример: 1250 такси'
   }
-  if (code === 'RATE_LIMITED') return 'Слишком много попыток\nПодожди минуту и попробуй снова.'
-  return 'Не удалось записать трату\nПопробуй ещё раз.'
+  if (code === 'RATE_LIMITED') return '⏳ Слишком часто\nПопробуй через минуту'
+  return '⚠️ Не записалось\nПопробуй ещё раз'
 }
 
 function normalizedBotUsername(value?: string) {
@@ -372,7 +372,7 @@ export async function buildApp(store: FinanceStore) {
     const kopecks = parseQuickAmount(split?.amount ?? query.amount ?? '') ?? 0
     const sum = (kopecks / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })
     return reply.type('text/plain; charset=utf-8').send(
-      `Трата записана\n${sum} ₽\nКатегория: ${result.categoryName ?? 'без категории'}`)
+      `✅ Записано ${sum} ₽\n${result.categoryName ?? 'Без категории'}`)
   })
 
   app.post('/api/v1/telegram/webhook/:secret', async (request, reply) => {

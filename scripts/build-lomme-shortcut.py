@@ -61,7 +61,7 @@ def build_workflow(
             "WFWorkflowActionIdentifier": "is.workflow.actions.ask",
             "WFWorkflowActionParameters": {
                 "UUID": ask_uuid,
-                "WFAskActionPrompt": "Сколько и на что?\nНапример: 1250 такси",
+                "WFAskActionPrompt": "💸 Запиши, сколько потратил и на что",
             },
         }
         ask_output_name = "Запросить входные данные"
@@ -127,19 +127,20 @@ def build_workflow(
         },
     }
 
-    show_result_action = {
-        "WFWorkflowActionIdentifier": "is.workflow.actions.showresult",
+    notification_action = {
+        "WFWorkflowActionIdentifier": "is.workflow.actions.notification",
         "WFWorkflowActionParameters": {
-            "Text": token_string(
+            "WFNotificationActionBody": token_string(
                 OBJECT_REPLACEMENT,
                 {"{0, 1}": action_output(request_uuid, "Содержимое URL")},
-            )
+            ),
+            "WFNotificationActionSound": False,
         },
     }
 
     actions = [ask_action, url_action, key_action, request_action]
     if include_result:
-        actions.append(show_result_action)
+        actions.append(notification_action)
 
     workflow: dict[str, object] = {
         "WFQuickActionSurfaces": [],

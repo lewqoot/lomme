@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LightMyRequestResponse } from 'fastify'
-import { buildApp } from '../server/app.js'
+import { buildApp, shortcutErrorText } from '../server/app.js'
 import { MemoryFinanceStore } from '../server/store/memory.js'
 
 async function session() {
@@ -115,7 +115,7 @@ describe('быстрый ввод из шортката', () => {
     expect(response.statusCode).toBe(200)
     expect(response.headers['content-type']).toContain('text/plain')
     // ru-RU разделяет разряды неразрывным пробелом.
-    expect(response.body.replace(/[\u00a0\u202f]/g, ' ')).toBe('Трата записана\n1 250,5 ₽\nКатегория: без категории')
+    expect(response.body.replace(/[\u00a0\u202f]/g, ' ')).toBe('✅ Записано 1 250,5 ₽\nБез категории')
 
     const created = (await snapshot()).transactions.find((item: { note: string | null }) => item.note === 'такси домой')
     expect(created.amountKopecks).toBe(125_050)
@@ -134,6 +134,20 @@ describe('быстрый ввод из шортката', () => {
 
     // Без суммы записывать нечего — лучше ошибка, чем трата на 0.
     expect((await app.inject({ method: 'GET', url: '/api/v1/quick?q=%D1%82%D0%B0%D0%BA%D1%81%D0%B8', headers: { authorization: `Bearer ${key}` } })).statusCode).toBe(400)
+    await app.close()
+  })
+
+  it('показывает найденную категорию второй строкой подтверждения', async () => {
+    const { app, key, snapshot } = await session()
+    const category = (await snapshot()).categories.find((item: { type: string }) => item.type === 'expense')
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/quick?q=${encodeURIComponent(`100 ${category.name}`)}`,
+      headers: { authorization: `Bearer ${key}` },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.body).toBe(`✅ Записано 100 ₽\n${category.name}`)
     await app.close()
   })
 
@@ -161,7 +175,7 @@ describe('быстрый ввод из шортката', () => {
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/quick?q=100', headers: { authorization: `Bearer ${key}` } })
     expect(response.statusCode).toBe(200)
-    expect(response.body).toBe('Трата записана\n100 ₽\nКатегория: без категории')
+    expect(response.body).toBe('✅ Записано 100 ₽\nБез категории')
 
     const created = (await snapshot()).transactions.find((item: { source: string; amountKopecks: number }) =>
       item.source === 'shortcut' && item.amountKopecks === 10_000)
@@ -177,13 +191,22 @@ describe('быстрый ввод из шортката', () => {
     const missing = await app.inject({ method: 'GET', url: '/api/v1/quick?amount=80' })
     expect(missing.statusCode).toBe(401)
     expect(missing.headers['content-type']).toContain('text/plain')
-    expect(missing.body).toContain('Команда устарела')
+    expect(missing.body).toBe('🔑 Ключ больше не работает\nОткрой Lomme → Настройки → Быстрый ввод')
     const invalid = await app.inject({ method: 'GET', url: '/api/v1/quick?key=lom_nope&amount=80' })
     expect(invalid.statusCode).toBe(401)
     expect(invalid.headers['content-type']).toContain('text/plain')
-    expect(invalid.body).toContain('Настроить заново')
+    expect(invalid.body).toBe('🔑 Ключ больше не работает\nОткрой Lomme → Настройки → Быстрый ввод')
     expect((await snapshot()).transactions).toHaveLength(count)
     await app.close()
+  })
+
+  it('возвращает короткие одинаково оформленные тексты ошибок для Shortcut', () => {
+    expect(shortcutErrorText('QUICK_KEY_INVALID')).toBe('🔑 Ключ больше не работает\nОткрой Lomme → Настройки → Быстрый ввод')
+    expect(shortcutErrorText('QUICK_KEY_MISSING')).toBe('🔑 Ключ больше не работает\nОткрой Lomme → Настройки → Быстрый ввод')
+    expect(shortcutErrorText('QUICK_AMOUNT_INVALID')).toBe('🤔 Не нашёл сумму\nНапример: 1250 такси')
+    expect(shortcutErrorText('VALIDATION_ERROR')).toBe('🤔 Не нашёл сумму\nНапример: 1250 такси')
+    expect(shortcutErrorText('RATE_LIMITED')).toBe('⏳ Слишком часто\nПопробуй через минуту')
+    expect(shortcutErrorText('INTERNAL_ERROR')).toBe('⚠️ Не записалось\nПопробуй ещё раз')
   })
 
   it('ключ не даёт делать ничего, кроме записи траты', async () => {
