@@ -124,6 +124,10 @@ export async function buildApp(store: FinanceStore) {
     max: 180,
     timeWindow: '1 minute',
     keyGenerator: async (request) => {
+      // Static files, fonts and icons must never turn into session lookups. Keep
+      // their rate-limit identity IP-based; API calls may use the authenticated
+      // user so one shared Telegram egress IP does not mix unrelated clients.
+      if (!request.url.startsWith('/api/')) return request.ip
       const token = request.cookies.lomme_session
       if (token) {
         const user = await store.userForSession(token)

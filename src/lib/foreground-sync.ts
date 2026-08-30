@@ -2,6 +2,10 @@ import { webApp } from './telegram.js'
 
 type Cleanup = () => void
 
+// Foreground/focus events refresh immediately. The timer is only a safety net
+// for changes made from another device while this WebView stays open.
+export const SNAPSHOT_POLL_INTERVAL_MS = 60_000
+
 /**
  * Telegram hands control to native apps (Shortcuts, the camera, Safari) without
  * always producing the same browser event on every iOS version. Listen to all

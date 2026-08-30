@@ -21,7 +21,6 @@ test-results
 
 # Local agent workspaces and review artifacts
 .claude
-AGENTS.md
 AUDIT-*.md
 NEXT-SESSION.md
 output
