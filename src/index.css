@@ -809,20 +809,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   touch-action: pan-y;
   background: linear-gradient(180deg, var(--ref-color-ddf5ea) 0%, var(--ref-color-edfbf4) 14%, var(--ref-color-f6fdfa) 26%, var(--ref-color-fdfffe) 37%, var(--ref-color-fff) 45%);
 }
-/* Grab handle: the affordance that says the card can be pushed back down. */
-.insights-grabber {
-  padding: 0;
-  border: 0;
-  width: 38px;
-  height: 4px;
-  margin: 0 auto 10px;
-  border-radius: 999px;
-  display: block;
-  background: var(--ref-rgba-20-20-20-p16);
-}
-/* While the finger is down the card follows it one-to-one and the animation is off. */
-.insights-screen.dragging { animation: none; transition: none; transform: translateY(var(--drag, 0px)); }
-.insights-screen.settling { animation: none; transition: transform .3s var(--ease-out); transform: none; }
 .insights-top { justify-content: space-between; }
 
 .day-group + .day-group { margin-top: 20px; }
@@ -2265,12 +2251,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .account-pill.compact .account-icon { margin: 0; }
 
-/* The sheet has no header of its own: the grab handle and a tap outside dismiss it. */
-.insights-screen > .insights-grabber { margin-top: 2px; }
+/* Insights has no separate header; its visible Back button is the only dismissal. */
 .insights-back { position: absolute; top: 16px; left: var(--gutter); z-index: 2; }
-/* While the card is up the screen underneath stays put and dims slightly, and the
-   strip left visible above the card is the tap target that puts it away. */
-.receding-under.peeking { pointer-events: auto; cursor: pointer; }
+/* While the card is up the screen underneath stays put, dims slightly, and remains inert. */
 .receding-under.peeking .home-layer.receding { transform: scale(.965); opacity: .5; transition: none; }
 
 /* The category name reads centred in its row, in both the manager and the picker. */
@@ -2303,9 +2286,7 @@ button:active:not(:disabled),
 }
 .insight-tiles article:active { transform: scale(.982); filter: brightness(.985); }
 
-/* The card is promoted while it follows the finger, so Home behind it is not
-   re-rasterised on every frame of the drag. */
-.insights-screen.dragging { will-change: transform; }
+/* Keep Home promoted during the sheet transition so it is not re-rasterised. */
 .receding-under.peeking .home-layer.receding { will-change: transform; backface-visibility: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2356,8 +2337,8 @@ button:active:not(:disabled),
    disabled in App.tsx because some iOS clients never display it. */
 :root.in-telegram .insights-back { top: calc(var(--shell-pad-top) + 10px); }
 
-/* 2. Insights fills the screen; the swipe is what closes it. The controls still
-   have to clear Telegram's own bar, which the peek used to do for them. */
+/* 2. Insights fills the screen and closes only through its Back button. The controls
+   still have to clear Telegram's own bar, which the peek used to do for them. */
 .insights-screen {
   --sheet-peek: 0px;
   padding-top: calc(var(--shell-pad-top) + 10px);

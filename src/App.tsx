@@ -15,7 +15,6 @@ import { FALLBACK_ICON, ICON_IDS } from './config/icons'
 import { ensureIconLibrary, isCoreIcon, isIconLibraryReady } from './lib/icon-library'
 import { tint } from './lib/palette'
 import { PeriodPill } from './features/period/PeriodPill'
-import { useSwipeDownToClose } from './features/motion/useSwipeDownToClose'
 import { useSwipeToDelete } from './features/motion/useSwipeToDelete'
 import { AnalyticsPage } from './features/analytics/AnalyticsPage'
 import { fromKopecks, initialCalc, pressKey, resolveKopecks, type CalcKey } from './features/editor/calculator'
@@ -337,7 +336,7 @@ export default function App() {
   </>
 
   return <main className={`app-shell${page !== 'home' ? ' overlay-shell' : ''}${navigationMotion !== 'idle' ? ` motion-${navigationMotion}` : ''}`}>
-    {(receding || page === 'insights') && page !== 'home' && <div className={`receding-under${page === 'insights' ? ' peeking' : ''}`} onClick={page === 'insights' ? goBack : undefined}><HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding onEditor={setEditor} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} /></div>}
+    {(receding || page === 'insights') && page !== 'home' && <div className={`receding-under${page === 'insights' ? ' peeking' : ''}`} inert aria-hidden="true"><HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding onEditor={setEditor} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} /></div>}
     {page === 'home' && <HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding={receding} onEditor={setEditor} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} />}
     {page === 'insights' && <InsightsPage data={data} period={period} setPeriod={setPeriod} onClose={goBack} />}
     {page === 'analytics' && <AnalyticsPage
@@ -576,7 +575,6 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
     : 0
   const runwayValue = monthlyBurn > 0 ? balance / monthlyBurn : 0
   const runway = runwayValue > 0 ? runwayValue.toFixed(1) : '0'
-  const [sheetRef, dragState] = useSwipeDownToClose(onClose)
   // The bar under the balance shows how much of the income survived the period, so
   // it has to be driven by that number rather than a fixed split.
   const savedShare = data.summary.incomeKopecks
@@ -587,7 +585,7 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
       ? `Расходы выше дохода на ${Math.round((-data.summary.netKopecks / data.summary.incomeKopecks) * 100)}%`
       : 'Расходы без дохода'
     : `Сохранено ${savedShare}% дохода`
-  return <div className={`insights-screen${dragState === 'idle' ? '' : ` ${dragState}`}`} ref={sheetRef}><button type="button" className="close-orb insights-back" aria-label="Назад" onClick={onClose}><ChevronLeft /></button><button type="button" className="insights-grabber" aria-label="Закрыть инсайты" onClick={onClose} /><div className="insights-balance"><PeriodPill value={period} onChange={setPeriod} tone="frost" /><strong>{money(data.summary.netKopecks)}</strong><div className="saving-line" style={{ '--saved': `${savedShare}%` } as CSSProperties}><i /><span><HandCoins />{savingLabel}</span></div></div><Suspense fallback={<section className="insights-chart placeholder" />}><InsightsChart trend={trend} daysInMonth={bucketCount} cutoffDay={cutoffDay} maximum={chartMaximum} ticks={chartTicks} totalKopecks={data.summary.expenseKopecks} /></Suspense><section className="insight-tiles">
+  return <div className="insights-screen"><button type="button" className="close-orb insights-back" aria-label="Назад" onClick={onClose}><ChevronLeft /></button><div className="insights-balance"><PeriodPill value={period} onChange={setPeriod} tone="frost" /><strong>{money(data.summary.netKopecks)}</strong><div className="saving-line" style={{ '--saved': `${savedShare}%` } as CSSProperties}><i /><span><HandCoins />{savingLabel}</span></div></div><Suspense fallback={<section className="insights-chart placeholder" />}><InsightsChart trend={trend} daysInMonth={bucketCount} cutoffDay={cutoffDay} maximum={chartMaximum} ticks={chartTicks} totalKopecks={data.summary.expenseKopecks} /></Suspense><section className="insight-tiles">
       <InsightTile title="Средние траты в день" icon={<CalendarDays />} sign="out" value={moneyExact(data.summary.averageExpensePerDayKopecks)} />
       <InsightTile title="Самая большая трата" note={largestExpenseCategory?.name || 'Без категории'} value={money(data.summary.largestExpenseKopecks)} tone="warm">
         {largestExpenseCategory
