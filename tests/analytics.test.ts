@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calculateSummary, periodForMonth } from '../server/lib/analytics.js'
 import type { CategoryView, TransactionView } from '../src/shared/contracts.js'
+import { hasReliableInsightSample, savedIncomePercent } from '../src/features/insights/reliability.js'
 
 describe('financial analytics', () => {
   it('не считает переводы доходом или расходом и сохраняет точность до копейки', () => {
@@ -17,5 +18,30 @@ describe('financial analytics', () => {
     expect(summary.incomeKopecks).toBe(100_000_01)
     expect(summary.expenseKopecks).toBe(12_345_67)
     expect(summary.netKopecks).toBe(87_654_34)
+  })
+})
+
+describe('достоверность инсайтов', () => {
+  it('не приписывает пользователю дни до первой операции', () => {
+    const accountId = crypto.randomUUID()
+    const transaction: TransactionView = {
+      id: crypto.randomUUID(), type: 'income', amountKopecks: 100_00, accountId,
+      targetAccountId: null, categoryId: null, occurredAt: '2026-08-29T10:00:00.000Z',
+      note: '', source: 'manual', authorName: 'Алекс', version: 1,
+    }
+    const summary = calculateSummary(
+      [transaction], [],
+      { start: new Date('2026-08-01T00:00:00.000Z'), end: new Date('2026-08-31T23:59:59.999Z') },
+      new Date('2026-08-30T12:00:00.000Z'),
+      'UTC',
+    )
+    expect(summary.observedDayCount).toBe(2)
+    expect(summary.expenseFreeStreakDays).toBe(2)
+    expect(hasReliableInsightSample(summary.observedDayCount)).toBe(false)
+  })
+
+  it('не округляет неполное сохранение дохода до 100%', () => {
+    expect(savedIncomePercent(1_000_00, 1, 999_99)).toBe(99)
+    expect(savedIncomePercent(1_000_00, 0, 1_000_00)).toBe(100)
   })
 })

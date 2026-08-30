@@ -18,7 +18,8 @@ import { PeriodPill } from './features/period/PeriodPill'
 import { useSwipeToDelete } from './features/motion/useSwipeToDelete'
 import { AnalyticsPage } from './features/analytics/AnalyticsPage'
 import { fromKopecks, initialCalc, pressKey, resolveKopecks, type CalcKey } from './features/editor/calculator'
-import { fromLocalDateTimeInput, toLocalDateTimeInput } from './features/editor/datetime'
+import { formatOperationDateLabel, fromLocalDateTimeInput, toLocalDateTimeInput } from './features/editor/datetime'
+import { hasReliableInsightSample, savedIncomePercent } from './features/insights/reliability'
 import { CategoriesPage } from './features/categories/CategoriesPage'
 import { byUsage } from './features/categories/ordering'
 import { SettingsPage } from './features/settings/SettingsPage'
@@ -577,10 +578,11 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
   const runway = runwayValue > 0 ? runwayValue.toFixed(1) : '0'
   // The bar under the balance shows how much of the income survived the period, so
   // it has to be driven by that number rather than a fixed split.
-  const savedShare = data.summary.incomeKopecks
-    ? Math.min(100, Math.max(0, Math.round((data.summary.netKopecks / data.summary.incomeKopecks) * 100)))
-    : 0
-  const savingLabel = data.summary.netKopecks < 0
+  const insightsReliable = hasReliableInsightSample(data.summary.observedDayCount)
+  const savedShare = savedIncomePercent(data.summary.incomeKopecks, data.summary.expenseKopecks, data.summary.netKopecks)
+  const savingLabel = !insightsReliable
+    ? 'Пока мало данных'
+    : data.summary.netKopecks < 0
     ? data.summary.incomeKopecks
       ? `Расходы выше дохода на ${Math.round((-data.summary.netKopecks / data.summary.incomeKopecks) * 100)}%`
       : 'Расходы без дохода'
@@ -598,8 +600,8 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
           : <span className="tile-category neutral"><CircleSlash2 /></span>}
       </InsightTile>
       <InsightTile title="Самый дорогой день" icon={<ShoppingBag />} sign="out" note={peakLabel} value={money(data.summary.mostExpensiveDayKopecks)} />
-      <InsightTile title="Серия без трат" icon={<Flame className="hot" />} note={`${data.summary.expenseFreeStreakDays} ${plural(data.summary.expenseFreeStreakDays, 'день', 'дня', 'дней')} подряд без трат`} value={String(data.summary.expenseFreeStreakDays)} />
-      <InsightTile title="Траты в выходные" icon={<Umbrella />} note={`${data.summary.weekendExpenseSharePercent}% трат приходится на выходные`} value={`${data.summary.weekendExpenseSharePercent}%`} />
+      <InsightTile title="Серия без трат" icon={<Flame className="hot" />} note={insightsReliable ? `${data.summary.expenseFreeStreakDays} ${plural(data.summary.expenseFreeStreakDays, 'день', 'дня', 'дней')} подряд без трат` : 'Пока мало данных'} value={insightsReliable ? String(data.summary.expenseFreeStreakDays) : '—'} />
+      <InsightTile title="Траты в выходные" icon={<Umbrella />} note={insightsReliable ? `${data.summary.weekendExpenseSharePercent}% трат приходится на выходные` : 'Пока мало данных'} value={insightsReliable ? `${data.summary.weekendExpenseSharePercent}%` : '—'} />
       <InsightTile title="Количество операций" note="Операций за выбранный период" value={String(data.summary.operationCount)} />
       <InsightTile title="Самая частая категория" note={mostFrequentExpenseCategory?.name || 'Без категории'} value={String(data.summary.mostFrequentExpenseCategoryCount)} icon={mostFrequentExpenseCategory ? <span className="tile-category" style={tileStyle(mostFrequentExpenseCategory.color)}><CategoryGlyph icon={mostFrequentExpenseCategory.icon} /></span> : <span className="tile-category neutral"><CircleSlash2 /></span>} />
       <InsightTile title="Подушка безопасности" icon={<RectangleHorizontal className="safe" />} note={`Текущих средств хватит на ${runway} мес. расходов`} value={runway} />
@@ -746,7 +748,7 @@ function TransactionEditor({ data, state, closing, onClose, onSaved, onDelete }:
     <section className={`reference-amount ${type}`}><strong><AmountDigits value={calc.entry} /> ₽</strong></section>
     <section className={`transaction-meta${type === 'transfer' ? ' is-transfer' : ''}`}>
       {type === 'transfer' && <label><span className="account-icon"><WalletCards /></span><p><strong>{account?.name}</strong><small>{money(account?.balanceKopecks || 0)}</small></p><select value={accountId} onChange={(event) => setAccountId(event.target.value)}>{availableAccounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-      {type === 'transfer' ? <label><ArrowRightLeft /><p><strong>На счёт</strong><small>{data.accounts.find((item) => item.id === targetAccountId)?.name || 'Выберите'}</small></p><select value={targetAccountId} onChange={(event) => setTargetAccountId(event.target.value)}>{availableAccounts.filter((item) => item.id !== accountId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <label className="date-pill"><span>{format(new Date(occurredAt), 'Сегодня, HH:mm', { locale: ru })}</span><input type="datetime-local" value={occurredAt} onChange={(event) => setOccurredAt(event.target.value)} /></label>}
+      {type === 'transfer' ? <label><ArrowRightLeft /><p><strong>На счёт</strong><small>{data.accounts.find((item) => item.id === targetAccountId)?.name || 'Выберите'}</small></p><select value={targetAccountId} onChange={(event) => setTargetAccountId(event.target.value)}>{availableAccounts.filter((item) => item.id !== accountId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <label className="date-pill"><CalendarDays aria-hidden="true" /><span>{formatOperationDateLabel(occurredAt)}</span><input type="datetime-local" aria-label="Дата и время операции" value={occurredAt} onChange={(event) => setOccurredAt(event.target.value)} /></label>}
       <span className="currency-pill">₽</span>
     </section>
     <input className="reference-note" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Заметка" maxLength={500} />

@@ -224,6 +224,8 @@ export type DashboardSummary = {
   periodEnd: string
   granularity: 'day' | 'month'
   elapsedDays: number
+  /** Calendar days from the first recorded operation to the period cutoff. */
+  observedDayCount: number
   netKopecks: number
   incomeKopecks: number
   expenseKopecks: number
