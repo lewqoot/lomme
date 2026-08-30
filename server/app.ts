@@ -40,7 +40,7 @@ const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 // The command lives in this release, rather than behind a manually published
 // iCloud URL. That keeps the Shortcut the user installs in sync with the code
 // that generated it.
-const SHORTCUT_FILE_NAME = 'Lomme — записать трату.shortcut'
+const SHORTCUT_FILE_NAME = 'Lomme.shortcut'
 
 function telegramInitMaxAgeSeconds() {
   const configured = Number(process.env.TELEGRAM_INIT_MAX_AGE_SECONDS)

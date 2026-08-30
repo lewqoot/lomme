@@ -11,6 +11,7 @@ describe('установка команды на iPhone', () => {
     expect(response.statusCode).toBe(200)
     expect(response.headers['content-type']).toContain('application/octet-stream')
     expect(response.headers['content-disposition']).toContain('attachment')
+    expect(response.headers['content-disposition']).toContain('Lomme.shortcut')
     expect(response.rawPayload.length).toBeGreaterThan(1_000)
     expect(response.headers['cache-control']).toBe('no-store')
   })

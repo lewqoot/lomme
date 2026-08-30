@@ -17,6 +17,16 @@ from pathlib import Path
 ENDPOINT = "https://lomme-production.up.railway.app/api/v1/quick?q="
 KEY_PLACEHOLDER = "LOMME_PERSONAL_KEY"
 OBJECT_REPLACEMENT = "\ufffc"
+SHORTCUT_NAME = "Lomme"
+# Apple Shortcuts' built-in lime-green tile. Using a system swatch keeps the
+# color intact when the file is imported on iPhone.
+SHORTCUT_ICON_COLOR = -2_873_601  # 0xFFD426FF (RGBA)
+SHORTCUT_ICON_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "public"
+    / "shortcuts"
+    / "lomme-shortcut-icon.png"
+)
 
 
 def action_output(output_uuid: str, output_name: str) -> dict[str, str]:
@@ -142,7 +152,9 @@ def build_workflow(
     if include_result:
         actions.append(notification_action)
 
+    logo_data = SHORTCUT_ICON_PATH.read_bytes()
     workflow: dict[str, object] = {
+        "WFWorkflowName": SHORTCUT_NAME,
         "WFQuickActionSurfaces": [],
         "WFWorkflowActions": actions,
         "WFWorkflowClientVersion": "4610",
@@ -150,7 +162,8 @@ def build_workflow(
         "WFWorkflowHasShortcutInputVariables": False,
         "WFWorkflowIcon": {
             "WFWorkflowIconGlyphNumber": 61440,
-            "WFWorkflowIconStartColor": -23508481,
+            "WFWorkflowIconStartColor": SHORTCUT_ICON_COLOR,
+            "WFWorkflowIconImageData": logo_data,
         },
         "WFWorkflowImportQuestions": [],
         "WFWorkflowInputContentItemClasses": [
@@ -198,7 +211,7 @@ def main() -> None:
         "output",
         nargs="?",
         type=Path,
-        default=Path("dist-shortcut/Lomme — записать трату.wflow"),
+        default=Path("dist-shortcut/Lomme.wflow"),
     )
     parser.add_argument(
         "--without-import-question",

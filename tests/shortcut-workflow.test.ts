@@ -11,4 +11,11 @@ describe('сценарий быстрого ввода для iPhone', () => {
     expect(generatorSource).toContain('"WFNotificationActionSound": False')
     expect(generatorSource).not.toContain('is.workflow.actions.showresult')
   })
+
+  it('называется Lomme и содержит фирменные иконку и лаймовую плашку', () => {
+    expect(generatorSource).toContain('SHORTCUT_NAME = "Lomme"')
+    expect(generatorSource).toContain('"WFWorkflowName": SHORTCUT_NAME')
+    expect(generatorSource).toContain('SHORTCUT_ICON_COLOR = -2_873_601')
+    expect(generatorSource).toContain('"WFWorkflowIconImageData": logo_data')
+  })
 })
