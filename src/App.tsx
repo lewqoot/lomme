@@ -492,7 +492,13 @@ function OperationRow({ item, category, shared, onOpen, onDelete }: {
     <button type="button" className="operation-delete" aria-label="Удалить операцию" onClick={() => { close(); onDelete() }}><Trash2 /></button>
     <button className="operation-row" type="button" onClick={() => (revealed ? close() : onOpen())}>
       <span className="category-icon" style={tileStyle(category?.color)}>{item.type === 'transfer' ? <ArrowRightLeft /> : <CategoryGlyph icon={category?.icon} />}</span>
-      <span className="operation-copy"><strong>{category?.name || (item.type === 'transfer' ? 'Перевод' : 'Без категории')}</strong>{item.note && <small>{item.note}</small>}{shared && <small className="operation-author">Добавил · {item.authorName}</small>}</span>
+      <span className="operation-copy">
+        <span className="operation-heading">
+          <strong>{category?.name || (item.type === 'transfer' ? 'Перевод' : 'Без категории')}</strong>
+          {shared && <small className="operation-author" aria-label={`Добавил ${item.authorName}`}>{item.authorName}</small>}
+        </span>
+        {item.note && <small>{item.note}</small>}
+      </span>
       <strong className={item.type}>{item.type === 'income' ? '+' : item.type === 'expense' ? '−' : ''}{money(item.amountKopecks)}</strong>
     </button>
   </div>
