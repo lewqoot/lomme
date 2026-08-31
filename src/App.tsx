@@ -10,7 +10,7 @@ import { differenceInCalendarDays, differenceInCalendarMonths, format, isSameDay
 import { ru } from 'date-fns/locale'
 import type { AccountInvitePreview, AccountView, AppSnapshot, TransactionPage, TransactionType, TransactionView } from './shared/contracts'
 import { api, ApiError, authenticate, haptic } from './lib/api'
-import { copyText, ensureTelegramFullscreen, haptics, isTelegram, resolveTelegramInviteToken, setBackButton, shareTelegramLink, syncTelegramTheme, telegramInviteToken, webApp } from './lib/telegram'
+import { copyText, ensureTelegramFullscreen, haptics, resolveTelegramInviteToken, setBackButton, shareTelegramLink, telegramInviteToken } from './lib/telegram'
 import { FALLBACK_ICON, ICON_IDS } from './config/icons'
 import { ensureIconLibrary, isCoreIcon, isIconLibraryReady } from './lib/icon-library'
 import { tint } from './lib/palette'
@@ -120,7 +120,6 @@ export default function App() {
     refetchOnWindowFocus: 'always',
   })
   const data = snapshot.data
-  const userTheme = data?.user.theme
 
   const loadMore = useMutation<TransactionPage, Error, { cursor: string; activeWorkspaceId: string; activeAccountId: string | null; queryKey: readonly unknown[] }>({
     mutationFn: ({ cursor, activeWorkspaceId, activeAccountId }) => {
@@ -147,26 +146,6 @@ export default function App() {
     },
     onError: () => setToast({ text: 'Не удалось загрузить операции' }),
   })
-
-  useEffect(() => {
-    if (!userTheme) return
-    const preference = userTheme
-    const media = window.matchMedia?.('(prefers-color-scheme: dark)')
-    const telegram = webApp()
-    const apply = () => {
-      const dark = preference === 'dark' || (preference === 'system' && (isTelegram() ? telegram?.colorScheme === 'dark' : Boolean(media?.matches)))
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-      syncTelegramTheme(preference)
-    }
-    apply()
-    if (preference !== 'system') return
-    media?.addEventListener?.('change', apply)
-    telegram?.onEvent?.('themeChanged', apply)
-    return () => {
-      media?.removeEventListener?.('change', apply)
-      telegram?.offEvent?.('themeChanged', apply)
-    }
-  }, [userTheme])
 
   const refresh = useCallback(() => { void queryClient.invalidateQueries({ queryKey: ['snapshot'] }) }, [queryClient])
   const selectAccount = useCallback(async (nextWorkspaceId: string, nextAccountId: string | null) => {

@@ -31,8 +31,5 @@ export const UI_COLORS = {
   chartFlow: 'var(--chart-flow)',
 } as const
 
-/** Native Telegram methods require resolved hex strings, not CSS variables. */
-export const NATIVE_COLORS = { lightSurface: '#ffffff', darkSurface: '#0e2026' } as const
-
 /** Recharts accepts numeric SVG text metrics rather than CSS custom properties. */
 export const CHART_TYPE = { label: 9, value: 10, category: 10.5, regular: 400, bold: 700 } as const

@@ -191,16 +191,6 @@
   --logo-lime-fade: rgba(238, 247, 168, 0);
   --logo-lime-ring: rgba(200, 222, 47, .34);
   --logo-ink: #032127;
-  /* Dark theme reads as the mark's ink rather than the reference's green-grey. */
-  --logo-night: #061418;
-  --logo-night-surface: #0e2026;
-  --logo-night-panel: #172c32;
-  --logo-night-panel-strong: #21383f;
-  --logo-night-panel-soft: #112329;
-  --logo-night-line: #26414a;
-  --logo-night-frost: rgba(14, 32, 38, .84);
-  --logo-night-glass: rgba(14, 32, 38, .94);
-  --logo-night-insight: #10333a;
   /* Semantic money and state roles. Orange is expense, never generic status. */
   --income: var(--ref-color-0fc676);
   --income-text: var(--ref-color-087a49);
@@ -316,7 +306,8 @@
   --frost-blur: blur(22px) saturate(180%);
   --menu-blur: blur(28px) saturate(180%);
   /* Shared metrics of the pill language the reference is built on. */
-  --gutter: 11px;
+  --screen-gutter: 11px;
+  --gutter: var(--screen-gutter);
   --pill-h: 40px;
   --touch-target: 44px;
   /* Pitch stays at 53 (matches the reference); the row takes more of it and the
@@ -1437,21 +1428,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .category-type-switch.income button.active { background: var(--income-soft-switch); }
 .category-type-switch.expense button.active { background: var(--expense-soft-switch); }
 .category-type-switch svg { width: 17px; height: 17px; stroke-width: 2.3; }
-.category-manage-list { margin-top: 14px; display: grid; gap: var(--row-gap); }
+.category-manage-list {
+  margin-top: 14px;
+  overflow: clip;
+  border-radius: 18px;
+  display: grid;
+  background: var(--panel);
+}
 .category-manage-row {
   min-height: 58px;
-  padding: 5px 8px;
-  border-radius: var(--row-radius);
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--line);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 7px;
-  background: var(--panel);
+  background: transparent;
   transition: transform .16s var(--ease-out), opacity .16s ease;
 }
-.category-manage-row.child { margin-left: 17px; }
+.category-manage-row:last-child { border-bottom: 0; }
+.category-manage-row.child { padding-left: 29px; }
 .category-manage-row.is-dragging { z-index: 4; touch-action: none; transform: scale(1.018); opacity: .9; box-shadow: 0 13px 28px var(--ref-rgba-20-20-20-p14); }
 .category-row-open {
+  width: 100%;
   min-width: 0;
   min-height: 42px;
   padding: 0;
@@ -1917,74 +1916,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .app-shell { min-height: calc(var(--app-vh) - 48px); border-radius: 32px; box-shadow: 0 22px 70px var(--ref-rgba-16-24-19-p12); }
 }
 
-/* Dark surfaces are the logo's ink diluted, not the reference's green-grey, so the
-   lime accents on top read as the same pairing the mark uses. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color: var(--ref-color-f3f5f3);
-    background: var(--logo-night);
-    --ink: var(--ref-color-f3f5f3);
-    --muted: var(--ref-color-949b95);
-    --muted-strong: var(--ref-color-b7beb8);
-    --surface: var(--logo-night-surface);
-    --panel: var(--logo-night-panel);
-    --panel-strong: var(--logo-night-panel-strong);
-    --panel-soft: var(--logo-night-panel-soft);
-    --line: var(--logo-night-line);
-    --income-text: var(--ref-color-54e39c);
-    --frost: var(--logo-night-frost);
-  }
-}
-:root[data-theme="dark"] {
-  color: var(--ref-color-f3f5f3);
-  background: var(--logo-night);
-  --ink: var(--ref-color-f3f5f3);
-  --muted: var(--ref-color-949b95);
-  --muted-strong: var(--ref-color-b7beb8);
-  --surface: var(--logo-night-surface);
-  --panel: var(--logo-night-panel);
-  --panel-strong: var(--logo-night-panel-strong);
-  --panel-soft: var(--logo-night-panel-soft);
-  --line: var(--logo-night-line);
-  --income-text: var(--ref-color-54e39c);
-  --frost: var(--logo-night-frost);
-}
-:root[data-theme="light"] {
-  color: var(--brand-ink);
-  background: var(--ref-color-eef0ed);
-  --ink: var(--brand-ink);
-  --muted: var(--ref-color-8b908c);
-  --muted-strong: var(--ref-color-6b6b6b);
-  --surface: var(--ref-color-fff);
-  --panel: var(--ref-color-f2f2f2);
-  --panel-strong: var(--ref-color-e5e5e5);
-  --line: var(--ref-color-dedfdd);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body,
-  :root:not([data-theme="light"]) .app-shell { background: var(--surface); }
-}
-:root[data-theme="dark"] body, :root[data-theme="dark"] .app-shell { background: var(--surface); }
-:root[data-theme="dark"] .app-shell::before { opacity: .25; }
-:root[data-theme="dark"] .account-pill,
-:root[data-theme="dark"] .header-actions,
-:root[data-theme="dark"] .glass,
-:root[data-theme="dark"] .close-orb,
-:root[data-theme="dark"] .action-orb,
-:root[data-theme="dark"] .overlay-right { background: var(--logo-night-glass); }
-:root[data-theme="dark"] .workspace-picker strong,
-:root[data-theme="dark"] .account-pill.static strong { color: var(--ref-color-f3f5f3); }
-:root[data-theme="dark"] .insights-screen { background: radial-gradient(circle at 40% 0%, var(--logo-night-insight) 0, var(--logo-night-surface) 45%); }
-:root[data-theme="dark"] .field input,
-:root[data-theme="dark"] .field select,
-:root[data-theme="dark"] .draft-input,
-:root[data-theme="dark"] .category-create select,
-:root[data-theme="dark"] .category-create input,
-  :root[data-theme="dark"] .invite-link { color: var(--ref-color-f3f5f3); border-color: var(--logo-night-line); background: var(--logo-night-panel-soft); }
-:root[data-theme="dark"] .category-type-switch,
-:root[data-theme="dark"] .category-search { background: var(--logo-night-glass); }
-:root[data-theme="dark"] .category-parent-select { border-color: var(--logo-night-line); }
-
 /* Telegram supplies its own chrome: no rounded desktop frame, no extra top inset. */
 :root.in-telegram body { padding: 0; }
 :root.in-telegram .app-shell {
@@ -2239,13 +2170,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .settings-page-header { margin-bottom: 22px; }
 .settings-screen .settings-label,
-.settings-subscreen .settings-label { margin: 19px 12px 7px; font-size: var(--font-size-12); }
+.settings-subscreen .settings-label { margin: 19px 0 7px; font-size: var(--font-size-12); }
 .settings-screen .settings-group,
-.settings-subscreen .settings-group { padding: 0 12px; border-radius: 18px; }
+.settings-subscreen .settings-group { padding: 0; border-radius: 18px; }
 .settings-group > .settings-row {
   width: 100%;
   min-height: 52px;
-  padding: 0 2px;
+  padding: 0 12px;
   border: 0;
   border-bottom: 1px solid var(--ref-color-dedede);
   display: grid;
@@ -2280,8 +2211,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .automation-links button { width: 100%; min-height: 43px; margin-top: 10px; padding: 0 12px; border: 0; border-radius: 13px; display: grid; grid-template-columns: 1fr 20px; align-items: center; color: var(--ink); text-align: left; background: var(--ref-color-dedede); }
 .automation-links code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: var(--font-size-11); }
 .automation-links button svg { width: 18px; height: 18px; }
-
-:root[data-theme="dark"] .automation-links button { background: var(--logo-night-panel-strong); }
 
 @media (prefers-reduced-motion: reduce) {
   .settings-subscreen { animation: scrim-in var(--motion-reduced) ease both; }

@@ -71,7 +71,6 @@ export interface FinanceStore {
   createInvite(userId: string, workspaceId: string): Promise<{ token: string; expiresAt: string }>
   acceptInvite(userId: string, token: string): Promise<{ workspaceId: string }>
   removeMember(userId: string, workspaceId: string, memberUserId: string): Promise<void>
-  updateTheme(userId: string, theme: 'system' | 'light' | 'dark'): Promise<void>
   runWorkerBatch(): Promise<{ expiredMedia: number }>
   health(): Promise<{ database: 'ok' | 'memory' }>
   close(): Promise<void>

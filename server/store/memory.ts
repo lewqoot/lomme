@@ -37,7 +37,6 @@ import { expenseCategories, incomeCategories } from './default-categories.js'
 
 type InternalUser = SessionUser & {
   telegramUserId: number
-  theme: 'system' | 'light' | 'dark'
   activeWorkspaceId: string | null
   activeAccountId: string | null
 }
@@ -74,7 +73,7 @@ export class MemoryFinanceStore implements FinanceStore {
     let userId = this.usersByTelegram.get(identity.id)
     if (!userId) {
       userId = randomUUID()
-      const user: InternalUser = { id: userId, telegramUserId: identity.id, firstName: identity.firstName, username: identity.username, timezone, theme: 'system', activeWorkspaceId: null, activeAccountId: null }
+      const user: InternalUser = { id: userId, telegramUserId: identity.id, firstName: identity.firstName, username: identity.username, timezone, activeWorkspaceId: null, activeAccountId: null }
       this.users.set(userId, user)
       this.usersByTelegram.set(identity.id, userId)
       this.createPersonalSpace(user)
@@ -151,7 +150,7 @@ export class MemoryFinanceStore implements FinanceStore {
         })
       : []
     return {
-      user: { id: user.id, firstName: user.firstName, username: user.username, timezone: user.timezone, theme: user.theme },
+      user: { id: user.id, firstName: user.firstName, username: user.username, timezone: user.timezone },
       workspaces: available,
       activeWorkspaceId,
       activeAccountId: selectedAccount?.id || null,
@@ -461,10 +460,6 @@ export class MemoryFinanceStore implements FinanceStore {
     if (userId === memberUserId) throw forbidden('Владелец не может удалить себя')
     this.members.set(workspaceId, this.members.get(workspaceId)!.filter((member) => member.userId !== memberUserId))
     for (const account of this.accounts.get(workspaceId) || []) this.accountAccess.get(account.id)?.delete(memberUserId)
-  }
-
-  async updateTheme(userId: string, theme: 'system' | 'light' | 'dark') {
-    this.requireUser(userId).theme = theme
   }
 
   async runWorkerBatch() { return { expiredMedia: 0 } }

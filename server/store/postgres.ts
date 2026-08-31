@@ -85,7 +85,7 @@ export class PostgresFinanceStore implements FinanceStore {
   async revokeSession(token: string) { await this.pool.query(`DELETE FROM sessions WHERE token_hash=$1`, [hashToken(token)]) }
 
   async snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, requestedAccountId?: string | null): Promise<AppSnapshot> {
-    const userResult = await this.pool.query(`SELECT id,first_name,username,timezone,theme,active_workspace_id,active_account_id FROM users WHERE id=$1 AND deleted_at IS NULL`, [userId])
+    const userResult = await this.pool.query(`SELECT id,first_name,username,timezone,active_workspace_id,active_account_id FROM users WHERE id=$1 AND deleted_at IS NULL`, [userId])
     if (!userResult.rowCount) throw forbidden()
     const accessibleResult = await this.pool.query(`WITH deltas AS (
       SELECT account_id,SUM(CASE WHEN type='income' THEN amount_kopecks ELSE -amount_kopecks END) AS amount
@@ -171,7 +171,7 @@ export class PostgresFinanceStore implements FinanceStore {
     const categories: CategoryView[] = categoryResult.rows.map(categoryRow)
     const summary = summaryFromSql(summaryResult.rows[0], categorySummaryResult.rows, trendResult.rows, window, byMonth, currentUser.timezone)
     return {
-      user: { id: currentUser.id, firstName: currentUser.first_name, username: currentUser.username, timezone: currentUser.timezone, theme: currentUser.theme },
+      user: { id: currentUser.id, firstName: currentUser.first_name, username: currentUser.username, timezone: currentUser.timezone },
       workspaces, activeWorkspaceId, activeAccountId: selectedAccount?.id || null, accounts, categories,
       transactions: journalPage.items,
       transactionsNextCursor: journalPage.nextCursor,
@@ -478,8 +478,6 @@ export class PostgresFinanceStore implements FinanceStore {
     await this.pool.query(`DELETE FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 AND role='member'`, [workspaceId, memberUserId])
     await this.repairActiveAccount(memberUserId)
   }
-  async updateTheme(userId: string, theme: 'system' | 'light' | 'dark') { await this.pool.query(`UPDATE users SET theme=$2,updated_at=now() WHERE id=$1`, [userId, theme]) }
-
   async runWorkerBatch() {
     const expired = await this.pool.query(`UPDATE media_objects SET deleted_at=now() WHERE deleted_at IS NULL AND expires_at<=now() RETURNING id`)
     return { expiredMedia: expired.rowCount || 0 }

@@ -110,8 +110,6 @@ export const authTelegramSchema = z.object({
   timezone: timeZoneSchema.default('Europe/Moscow'),
 })
 
-export const themeSchema = z.enum(['system', 'light', 'dark'])
-
 /**
  * The first public Telegram build was a design preview which kept its ledger in
  * the browser. This is a deliberately narrow, one-way bridge for moving that
@@ -246,7 +244,7 @@ export type DashboardSummary = {
 }
 
 export type AppSnapshot = {
-  user: { id: string; firstName: string; username: string | null; timezone: string; theme: 'system' | 'light' | 'dark' }
+  user: { id: string; firstName: string; username: string | null; timezone: string }
   workspaces: WorkspaceSummary[]
   activeWorkspaceId: string
   /** null means the aggregate "Все счета" scope inside activeWorkspaceId. */

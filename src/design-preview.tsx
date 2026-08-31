@@ -222,7 +222,7 @@ const buildSnapshot = (start: Date, end: Date): AppSnapshot => {
   for (const item of previewTransactions) if (item.categoryId) categoryUsage.set(item.categoryId, (categoryUsage.get(item.categoryId) ?? 0) + 1)
 
   return {
-    user: { id: 'u1', firstName: 'Alex', username: 'alex', timezone: 'Europe/Moscow', theme: 'system' },
+    user: { id: 'u1', firstName: 'Alex', username: 'alex', timezone: 'Europe/Moscow' },
     workspaces: [{ id: workspaceId, name: 'Личный', kind: 'personal', role: 'owner' }],
     activeWorkspaceId: workspaceId,
     activeAccountId: accountId,

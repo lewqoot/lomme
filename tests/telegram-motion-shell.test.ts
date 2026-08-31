@@ -242,18 +242,15 @@ describe('Telegram motion shell', () => {
     expect(impactOccurred).toHaveBeenCalledWith('light')
   })
 
-  it('синхронизирует цвет нативной шапки с темой приложения', () => {
+  it('принудительно оставляет нативную шапку светлой', () => {
     const app = {
-      initData: 'signed', platform: 'ios', colorScheme: 'dark' as const,
+      initData: 'signed', platform: 'ios', colorScheme: 'light' as const,
       setHeaderColor: vi.fn(), setBackgroundColor: vi.fn(),
     }
     vi.stubGlobal('window', { Telegram: { WebApp: app } })
 
-    syncTelegramTheme('system')
-    expect(app.setHeaderColor).toHaveBeenLastCalledWith('#0e2026')
-    syncTelegramTheme('light')
+    syncTelegramTheme()
     expect(app.setHeaderColor).toHaveBeenLastCalledWith('#ffffff')
-    syncTelegramTheme('dark')
-    expect(app.setBackgroundColor).toHaveBeenLastCalledWith('#0e2026')
+    expect(app.setBackgroundColor).toHaveBeenLastCalledWith('#ffffff')
   })
 })
