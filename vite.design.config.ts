@@ -2,6 +2,7 @@ import { cpSync, renameSync, writeFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { iconSprite } from './scripts/icon-sprite-plugin.ts'
+import { manualChunks } from './scripts/manual-chunks.ts'
 
 // Builds the mock-driven design preview into a self-contained folder that can be
 // deployed on its own - no database, no API, nothing from the main server.
@@ -29,6 +30,6 @@ export default defineConfig({
     cssTarget: ['chrome111', 'safari15.4', 'firefox121'],
     outDir: 'dist-design',
     emptyOutDir: true,
-    rollupOptions: { input: 'design-preview.html' },
+    rollupOptions: { input: 'design-preview.html', output: { manualChunks } },
   },
 })

@@ -560,8 +560,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   white-space: nowrap;
 }
 .insights-button svg:not(.pull-shape) { width: 14px; height: 14px; flex: 0 0 auto; stroke-width: 1.9; }
-.gift-mark { width: 14px; height: 14px; flex: 0 0 auto; display: block; }
-.gift-mark svg { width: 100% !important; height: 100% !important; display: block; }
+.gift-mark { width: 14px; height: 14px; flex: 0 0 auto; display: block; --gift-progress: 0; }
+.gift-mark svg { width: 100% !important; height: 100% !important; display: block; overflow: visible; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.gift-mark__lid { transform-box: fill-box; transform-origin: center bottom; transform: translateY(calc(var(--gift-progress) * -4px)) rotate(calc(var(--gift-progress) * -13deg)); }
+.gift-mark.finishing .gift-mark__lid { animation: gift-mark-settle 240ms var(--ease-out) both; }
+@keyframes gift-mark-settle {
+  from { transform: translateY(-4px) rotate(-13deg); }
+  to { transform: none; }
+}
 
 /* --- pull-to-open ---------------------------------------------------------
    While dragging, the pill drops its label and grows into a tile, and the list

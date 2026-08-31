@@ -800,59 +800,15 @@ function AmountDigits({ value }: { value: string }) {
 }
 
 
-/**
- * The gift that replaces the sparkle on the Insights button. Its playhead is
- * scrubbed by the pull, so dragging physically opens the box instead of playing
- * an animation that happens to run alongside the gesture.
- */
+/** A tiny inline gift, with its lid directly driven by the pull gesture. */
 function GiftMark({ progress, finish }: { progress: number; finish: boolean }) {
-  const host = useRef<HTMLSpanElement>(null)
-  const anim = useRef<{
-    destroy(): void
-    goToAndStop(v: number, isFrame: boolean): void
-    playSegments(seg: [number, number], force: boolean): void
-    totalFrames: number
-  } | null>(null)
-  const [ready, setReady] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const [{ default: lottie }, { default: data }] = await Promise.all([
-        import('lottie-web/build/player/lottie_light'),
-        import('./assets/pull-gift.json'),
-      ])
-      if (cancelled || !host.current) return
-      anim.current = lottie.loadAnimation({
-        container: host.current, renderer: 'svg', loop: false, autoplay: false, animationData: data,
-      }) as unknown as typeof anim.current
-      setReady(true)
-    })()
-    return () => { cancelled = true; anim.current?.destroy(); anim.current = null }
-  }, [])
-
-  // The box opens over frames 0-10 of 90; the rest of the clip is the bounce
-  // settling back. Mapping the pull onto the whole clip would leave 90% of the
-  // gesture with nothing happening, so it drives the opening only.
-  const OPEN_FRAME = 10
-  // Frame 31 is where the lid is back down and the box has settled; the remaining
-  // 60 frames are just hold, so finishing there keeps the handover snappy.
-  const CLOSE_FRAME = 31
-  useEffect(() => {
-    const player = anim.current
-    if (!player || !ready || finish) return
-    player.goToAndStop(Math.max(0, Math.min(1, progress)) * OPEN_FRAME, true)
-  }, [progress, ready, finish])
-
-  // Once the gesture commits, let the clip run out on its own so the box closes
-  // instead of freezing half-open while the screen hands over.
-  useEffect(() => {
-    const player = anim.current
-    if (!player || !ready || !finish) return
-    player.playSegments([OPEN_FRAME, CLOSE_FRAME], true)
-  }, [finish, ready])
-
-  return <span className="gift-mark" ref={host} aria-hidden="true" />
+  const open = Math.max(0, Math.min(1, progress))
+  return <span className={`gift-mark${finish ? ' finishing' : ''}`} style={{ '--gift-progress': open } as CSSProperties} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path className="gift-mark__lid" d="M4 9h16v3H4zM8 9c-2 0-3-1.1-3-2.4C5 5.5 5.9 5 7 5c2.1 0 3.7 2.3 5 4M16 9c2 0 3-1.1 3-2.4C19 5.5 18.1 5 17 5c-2.1 0-3.7 2.3-5 4" />
+      <path d="M5.5 12h13v7h-13zM12 9v10" />
+    </svg>
+  </span>
 }
 
 
