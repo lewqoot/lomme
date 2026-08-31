@@ -1144,17 +1144,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    the row is 51.6pt, with 9.7pt of panel left showing above and below.
    It is free to be narrower than the name it carries - in the reference a 50 ₽ row
    is a bare sliver with its label spilling out to the right, and reading the column
-   as a chart depends on that. The label is a separate layer for the same reason. */
+   as a chart depends on that. The label is a separate layer for the same reason.
+   The share is laid out as real width, not scaleX: a horizontal scale squashes
+   everything the bar carries with it - the pill's own corner radius into ellipses
+   and the label's text along with them. */
 .analytics-bar {
   position: absolute;
   left: 7px;
   top: 50%;
-  width: calc(100% - 14px);
+  width: calc((100% - 14px) * var(--bar, 0));
   height: 32px;
   border-radius: 999px;
-  transform: translateY(-50%) scaleX(var(--bar, 0));
-  transform-origin: left;
-  transition: transform .22s var(--ease-out), opacity .16s ease;
+  transform: translateY(-50%);
+  transition: width .22s var(--ease-out), opacity .16s ease;
 }
 .analytics-bar-label {
   position: absolute;
