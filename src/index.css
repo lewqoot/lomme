@@ -325,8 +325,9 @@
   --motion-micro: 160ms;
   --motion-select: 220ms;
   --motion-digit: 200ms;
-  --motion-sheet: 440ms;
-  --motion-sheet-exit: 360ms;
+  --motion-screen: 240ms;
+  --motion-sheet: var(--motion-screen);
+  --motion-sheet-exit: var(--motion-screen);
   --motion-reduced: 120ms;
   --elastic-release: cubic-bezier(.2, 1.28, .32, 1);
   --elastic-duration: 520ms;
@@ -567,51 +568,35 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    slides down behind it. Everything keys off --pull (0 -> 1 at the threshold). */
 .home-layer { --pull: 0; touch-action: pan-y; }
 .home-layer.pulling .insights-button { transition: none; }
-.insights-button { transition: min-height .32s var(--ease-out), margin-top .32s var(--ease-out), border-radius .32s var(--ease-out); }
+.insights-button { isolation: isolate; transition: transform var(--motion-screen) var(--ease-out), opacity var(--motion-screen) ease; }
 
 /* Measured off the reference: the tile keeps its width and grows in height from
    26 to 76pt while drifting ~19pt down. The list is not transformed - it simply
    follows in normal flow as the tile gets taller, which is what the original does. */
 .home-layer.pulling .insights-button {
-  /* Width is pinned: the reference tile keeps it while the label collapses, so the
-     button must not shrink to fit its icon. */
-  min-width: 104px;
-  /* Measured on the reference: ~92pt tall at full pull with a ~16pt bottom radius,
-     i.e. a column with straight sides - not the oval a larger radius produces. */
-  /* The tile expands in both directions: its top rises ~21pt (into the faded part
-     that is nearly invisible) while the bottom drops ~57pt. Net push on the list
-     below is the difference, which is what the reference shows. */
-  min-height: calc(25px + var(--pull) * 78px);
-  margin-top: calc(20px - var(--pull) * 21px);
-  /* A constant radius: the resting pill is only 25px tall, so 999px already renders
-     as 12.5px there - interpolating down from it just produced an oval mid-pull. */
-  border-radius: 16px;
-  justify-content: center;
-  /* Filled by <PullShape/> instead: the silhouette has a pinched waist that
-     border-radius cannot express, so it is drawn as a path. */
-  background: none;
+  /* The touch target stays in flow. Only its drawn backing stretches and travels,
+     so a pull no longer relayouts every operation row below it. */
+  transform: translateY(calc(var(--pull) * 18px));
+  background: transparent;
   box-shadow: none;
-  /* The glyph rides low in the tile - roughly three quarters down, not centred. */
-  align-items: flex-end;
-  padding-bottom: calc(4px + var(--pull) * 6px);
 }
 /* Only the text label collapses - the gift mark is a span too and must be spared. */
 .home-layer.pulling .insights-button span:not(.gift-mark) {
-  max-width: calc(60px - var(--pull) * 60px);
   opacity: calc(1 - var(--pull) * 2.4);
-  overflow: hidden;
+  transform: translateX(calc(var(--pull) * -7px)) scaleX(calc(1 - var(--pull)));
+  transform-origin: left;
 }
 /* The gift animates itself; only its size responds to the pull. */
 .home-layer.pulling .gift-mark {
-  width: calc(14px + var(--pull) * 22px);
-  height: calc(14px + var(--pull) * 22px);
+  transform: translateY(calc(var(--pull) * 11px)) scale(calc(1 + var(--pull) * 1.57));
+  transform-origin: 50% 100%;
 }
 
 /* Past the threshold the home screen recedes so the sheet can come over it. */
 .home-layer.receding {
   transform: scale(.94);
   opacity: .35;
-  transition: transform .36s cubic-bezier(.4,0,.2,1), opacity .36s ease;
+  transition: transform var(--motion-screen) cubic-bezier(.4,0,.2,1), opacity var(--motion-screen) ease;
   transform-origin: 50% 42%;
   pointer-events: none;
 }
@@ -647,7 +632,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .insights-screen {
   position: relative;
   z-index: 1;
-  animation: sheet-up .44s cubic-bezier(.32,.72,0,1) both;
+  animation: sheet-up var(--motion-screen) cubic-bezier(.32,.72,0,1) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .insights-screen { animation: none; }
@@ -678,7 +663,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   gap: 7px;
   text-align: left;
   background: var(--panel);
-  transition: transform .14s ease, background .14s ease;
+  transition: transform .14s ease;
 }
 .operation-row:active { transform: scale(.985); background: var(--ref-color-eaeaea); }
 .category-icon {
@@ -742,7 +727,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .floating-actions button {
   width: 51px;
   height: 51px;
-  transition: width .2s var(--ease-out), height .2s var(--ease-out);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1159,13 +1143,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   position: absolute;
   left: 7px;
   top: 50%;
-  translate: 0 -50%;
-  width: calc((100% - 14px) * var(--bar, 0));
-  max-width: calc(100% - 14px);
-  min-width: 6px;
+  width: calc(100% - 14px);
   height: 32px;
   border-radius: 999px;
-  transition: width .22s var(--ease-out), opacity .16s ease;
+  transform: translateY(-50%) scaleX(var(--bar, 0));
+  transform-origin: left;
+  transition: transform .22s var(--ease-out), opacity .16s ease;
 }
 .analytics-bar-label {
   position: absolute;
@@ -1189,7 +1172,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   display: grid;
   place-items: center;
   color: var(--ref-color-fff);
-  transition: background var(--motion-micro) ease, border-color var(--motion-micro) ease, transform var(--motion-micro) var(--ease-out);
+  transition: transform var(--motion-micro) var(--ease-out);
 }
 .analytics-tick.on { border-color: var(--ref-color-282828); transform: scale(1.04); background: var(--ref-color-282828); }
 .analytics-tick svg { width: 13px; height: 13px; }
@@ -1344,9 +1327,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-group > button > strong { font-size: var(--font-size-12-5); font-weight: var(--font-weight-medium); }
 .settings-group > button > em { color: var(--ref-color-8a8a8a); font-size: var(--font-size-11-5); font-style: normal; }
 .fake-toggle { width: 51px; height: 31px; padding: 2px; border-radius: 999px; display: block; background: var(--ref-color-bcbcbc); }
-.fake-toggle b { width: 27px; height: 27px; border-radius: 50%; display: block; background: var(--ref-color-fff); box-shadow: 0 2px 5px var(--ref-rgba-0-0-0-p18); transition: margin .16s ease; }
+.fake-toggle b { width: 27px; height: 27px; border-radius: 50%; display: block; background: var(--ref-color-fff); box-shadow: 0 2px 5px var(--ref-rgba-0-0-0-p18); transition: transform .16s ease; }
 .fake-toggle.on { background: var(--ref-color-171717); }
-.fake-toggle.on b { margin-left: 20px; }
+.fake-toggle.on b { transform: translateX(20px); }
 .category-panel { margin-top: 6px; padding: 10px; border-radius: 16px; background: var(--panel); }
 .category-chips { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
 .category-chips span { padding: 6px 8px; border-radius: 10px; display: flex; align-items: center; gap: 4px; font-size: var(--font-size-10); font-weight: var(--font-weight-emphasis); }
@@ -2001,11 +1984,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   pointer-events: none;
 }
 .motion-enter-push > :is(.family-screen, .settings-screen, .settings-subscreen, .categories-screen),
-.settings-subscreen { animation: screen-push-in 360ms var(--ease-out) both; }
+.settings-subscreen { animation: screen-push-in var(--motion-screen) var(--ease-out) both; }
 .motion-exit-push > :is(.family-screen, .settings-screen, .settings-subscreen, .categories-screen) {
   animation: screen-push-out var(--motion-sheet-exit) var(--ease-in) both;
   pointer-events: none;
 }
+@keyframes screen-push-back {
+  from { transform: translateX(-18px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.motion-enter-home > .home-layer,
+.settings-screen.motion-return-push { animation: screen-push-back var(--motion-screen) var(--ease-out) both; }
 /* Modules other than Insights take the screen over without a sheet: a short lift and
    fade, and no second copy of Home mounted underneath to show through the edges. */
 @keyframes screen-fade-in {
@@ -2034,10 +2023,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 @keyframes skeleton-slide { to { transform: translateX(110%); } }
 
-/* The selected category grows into place rather than snapping. */
-.category-carousel button { transition: width .22s var(--ease-out), height .22s var(--ease-out), flex-basis .22s var(--ease-out); }
-.category-carousel > strong { transition: color .22s ease; }
-
 /* Press feedback on the things that are meant to be tapped. */
 .reference-keypad button,
 .floating-actions button,
@@ -2051,7 +2036,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .category-save,
 .category-delete,
 .primary-button,
-.secondary-button { transition: transform .12s var(--ease-out), background .16s ease, opacity .16s ease; }
+.secondary-button { transition: transform .12s var(--ease-out), opacity .16s ease; }
 .floating-actions button:active,
 .reference-category-list > button:active,
 .settings-group > button:active,
@@ -2073,13 +2058,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .motion-enter-sheet > .insights-screen,
   .motion-enter-fade > :is(.analytics-screen, .accounts-screen, .family-screen, .settings-screen, .categories-screen, .search-screen),
   .motion-enter-push > :is(.family-screen, .settings-screen, .settings-subscreen, .categories-screen),
-  .settings-subscreen { animation: scrim-in var(--motion-reduced) ease both; }
+  .settings-subscreen,
+  .motion-enter-home > .home-layer,
+  .settings-screen.motion-return-push { animation: scrim-in var(--motion-reduced) ease both; }
   .motion-exit-sheet > .insights-screen,
   .motion-exit-fade > :is(.analytics-screen, .accounts-screen, .family-screen, .settings-screen, .categories-screen, .search-screen),
-  .motion-exit-push > :is(.family-screen, .settings-screen, .settings-subscreen, .categories-screen),
   .editor-shell.motion-exit-sheet,
-  .category-editor-sheet.motion-exit-sheet,
-  .settings-subscreen.motion-exit-push { animation: scrim-in var(--motion-reduced) ease reverse both; }
+  .category-editor-sheet.motion-exit-sheet { animation: scrim-in var(--motion-reduced) ease reverse both; }
   .motion-exit-sheet .receding-under .home-layer.receding { animation: none; transform: none; opacity: 1; }
   .motion-enter-sheet .receding-under.peeking .home-layer.receding { animation: none; transform: none; opacity: 1; }
   .editor-underlay.restoring .home-layer.receding { animation: none; transform: none; opacity: 1; }
@@ -2098,14 +2083,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   60% { opacity: .35; }
   to { transform: none; opacity: 1; }
 }
-/* The one laid-out property in here is the width of the fragment being deleted, and
-   collapsing it is the whole point: the amount is centred, so a digit that vanishes
-   the instant its node is dropped snaps the rest of the number sideways by half its
-   width. Shrinking the gap it leaves lets the number glide into its new centre. */
+/* The final amount is already laid out; the old fragment only moves and fades. */
 @keyframes digit-out {
-  from { max-width: var(--leaving-span); transform: none; opacity: 1; }
+  from { transform: none; opacity: 1; }
   40% { opacity: .35; }
-  to { max-width: 0; transform: translate(.1em, .3em) scale(.6); opacity: 0; }
+  to { transform: translate(.1em, .3em) scale(.6); opacity: 0; }
 }
 .reference-amount strong i {
   display: inline-block;
@@ -2113,25 +2095,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   will-change: transform, opacity;
   animation: digit-in var(--motion-digit) var(--ease-out) both;
 }
-/* The fragment holds still at its natural width for the one frame it takes App.tsx
-   to measure it, then collapses from exactly that width - a `ch`-based guess started
-   half a pixel short and twitched. It also holds `max-width: 0` after the animation,
-   so React dropping the node later costs no layout at all. */
-.reference-amount strong i.leaving { overflow: hidden; }
-.reference-amount strong i.leaving.armed { animation: digit-out var(--motion-digit) var(--ease-glide) both; }
-/* A digit that was replaced rather than trimmed - the 0 the first keypress writes
-   over - already has its successor standing in the same place. Holding a width for
-   it would widen the number for the length of the animation and shove the rest of
-   it sideways, so it leaves out of flow, from exactly where it stood. */
-@keyframes digit-swap {
-  from { transform: none; opacity: 1; }
-  40% { opacity: .35; }
-  to { transform: translate(.1em, .3em) scale(.6); opacity: 0; }
-}
-.reference-amount strong i.leaving.replaced {
+.reference-amount strong i.leaving {
   position: absolute;
   overflow: visible;
-  animation-name: digit-swap;
+  left: var(--leaving-offset);
+  animation: digit-out var(--motion-digit) var(--ease-glide) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .reference-amount strong i { animation: none; }
@@ -2141,9 +2109,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 /* Drawn tile behind the Insights button during the pull. */
 .pull-shape {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scaleY(calc(.24 + var(--pull) * .76));
+  transform-origin: 50% 100%;
   pointer-events: none;
   overflow: visible;
 }
@@ -2229,8 +2198,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   from { transform: translateX(18px); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
-.settings-subscreen { animation: settings-sheet-in .36s var(--ease-out) both; }
-.settings-subscreen.motion-exit-push { animation: screen-push-out var(--motion-sheet-exit) var(--ease-in) both; pointer-events: none; }
+.settings-subscreen { animation: settings-sheet-in var(--motion-screen) var(--ease-out) both; }
 .automation-info { padding: 16px; border-radius: 18px; display: grid; grid-template-columns: 34px 1fr; gap: 8px; background: var(--panel); }
 .automation-info > svg { width: 24px; height: 24px; }
 .automation-info p { margin: 4px 0 0; color: var(--muted); font-size: var(--font-size-11-5); line-height: 1.4; }
@@ -2246,7 +2214,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 @media (prefers-reduced-motion: reduce) {
   .settings-subscreen { animation: scrim-in var(--motion-reduced) ease both; }
-  .settings-subscreen.motion-exit-push { animation: scrim-in var(--motion-reduced) ease reverse both; }
 }
 
 /* Search runs over the loaded window, so it says which one. */
@@ -2274,7 +2241,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* --- press feedback -------------------------------------------------------- */
 /* A tap should be felt: the surface lifts a little and lightens for a moment. */
-button, .settings-row, [role="button"] { transition: transform .1s var(--ease-out), filter .1s var(--ease-out); }
+button, .settings-row, [role="button"] { transition: transform .1s var(--ease-out); }
 button:active:not(:disabled),
 .settings-row:active,
 [role="button"]:active { transform: scale(1.04); filter: brightness(1.07); }
@@ -2294,7 +2261,7 @@ button:active:not(:disabled),
 
 /* Tiles answer a tap the way the buttons do. */
 .insight-tiles article {
-  transition: transform .12s var(--ease-out), filter .12s var(--ease-out);
+  transition: transform .12s var(--ease-out);
   cursor: pointer;
 }
 .insight-tiles article:active { transform: scale(.982); filter: brightness(.985); }
@@ -2331,16 +2298,6 @@ button:active:not(:disabled),
   );
   background-size: 100% calc(100% + 20px);
   background-repeat: no-repeat;
-  animation: mood-shift 26s ease-in-out infinite alternate;
-}
-/* Shifts in px to match the px stops, and stays negative so the top edge always
-   shows gradient rather than the background-color underneath it. */
-@keyframes mood-shift {
-  from { background-position: 0 -20px; }
-  to { background-position: 0 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .insights-screen { animation: none; }
 }
 
 /* The note is a plain surface: it had a ring of its own on top of the focus ring. */
@@ -2372,24 +2329,26 @@ button:active:not(:disabled),
   transform: translate3d(calc(var(--swipe, 0px) * -1), 0, 0);
   will-change: transform;
 }
-.operation-swipe.settling .operation-row,
-.operation-swipe.settling .operation-delete { transition: transform .26s var(--ease-out), width .26s var(--ease-out); }
+.operation-swipe.settling .operation-row { transition: transform .26s var(--ease-out); }
+.operation-swipe.settling .operation-delete::before,
+.operation-swipe.settling .operation-delete svg { transition: transform .26s var(--ease-out), opacity .16s ease; }
 .operation-delete {
   position: absolute;
   top: 3px;
   bottom: 3px;
   right: 0;
-  width: max(0px, calc(var(--swipe, 0px) - 8px));
+  width: 92px;
   padding: 0;
   border: 0;
   border-radius: var(--row-radius);
   display: grid;
   place-items: center;
-  overflow: hidden;
+  isolation: isolate;
   color: var(--danger-strong);
-  background: var(--danger-surface-strong);
+  background: transparent;
 }
-.operation-delete svg { width: 21px; height: 21px; flex: 0 0 auto; stroke-width: 2; }
+.operation-delete::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; transform: scaleX(var(--swipe-progress, 0)); transform-origin: right; background: var(--danger-surface-strong); }
+.operation-delete svg { width: 21px; height: 21px; flex: 0 0 auto; stroke-width: 2; transform: scale(var(--swipe-progress, 0)); opacity: var(--swipe-progress, 0); }
 /* Nothing to press until the row has actually moved. */
 .operation-swipe:not(.revealed) .operation-delete { pointer-events: none; }
 
@@ -2402,11 +2361,7 @@ button:active:not(:disabled),
   stroke: var(--ref-color-fff);
   stroke-linecap: round;
   stroke-dasharray: 44;
-  animation: toast-drain 4.3s linear both;
-}
-@keyframes toast-drain {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: 44; }
+  stroke-dashoffset: 22;
 }
 @media (prefers-reduced-motion: reduce) {
   .operation-swipe.settling .operation-row { transition: none; }

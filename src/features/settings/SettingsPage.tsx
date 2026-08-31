@@ -10,6 +10,8 @@ import { api, ApiError, haptic } from '../../lib/api'
 import { copyText } from '../../lib/telegram'
 
 type SettingsScreen = 'root' | 'automations'
+type SettingsMotion = 'idle' | 'enter' | 'return'
+const SETTINGS_NAVIGATION_DURATION_MS = 240
 type Props = {
   backRef: { current: (() => void) | null }
   notify(text: string): void
@@ -19,21 +21,24 @@ type Props = {
 
 export function SettingsPage({ backRef, notify, onNavigate, onClose }: Props) {
   const [screen, setScreen] = useState<SettingsScreen>('root')
-  const [screenClosing, setScreenClosing] = useState(false)
+  const [screenMotion, setScreenMotion] = useState<SettingsMotion>('idle')
   const screenTimer = useRef<number | null>(null)
 
-  const open = (next: SettingsScreen) => { haptic(); setScreenClosing(false); setScreen(next); window.scrollTo({ top: 0, behavior: 'smooth' }) }
-  const back = useCallback(() => {
-    if (screenClosing) return
-    setScreenClosing(true)
+  const move = useCallback((next: SettingsScreen, motion: Exclude<SettingsMotion, 'idle'>) => {
+    if (screenTimer.current) window.clearTimeout(screenTimer.current)
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    setScreen(next)
+    setScreenMotion(motion)
+    window.scrollTo({ top: 0, behavior: 'auto' })
     screenTimer.current = window.setTimeout(() => {
-      setScreen('root')
-      setScreenClosing(false)
-      window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' })
+      setScreenMotion('idle')
       screenTimer.current = null
-    }, reduced ? 120 : 360)
-  }, [screenClosing])
+    }, reduced ? 120 : SETTINGS_NAVIGATION_DURATION_MS)
+  }, [])
+  const open = (next: SettingsScreen) => { haptic(); move(next, 'enter') }
+  const back = useCallback(() => {
+    move('root', 'return')
+  }, [move])
 
   useEffect(() => () => {
     if (screenTimer.current) window.clearTimeout(screenTimer.current)
@@ -44,10 +49,9 @@ export function SettingsPage({ backRef, notify, onNavigate, onClose }: Props) {
     return () => { backRef.current = null }
   }, [back, backRef, screen])
 
-  const subscreenMotion = screenClosing ? ' motion-exit-push' : ''
-  if (screen === 'automations') return <AutomationsScreen motion={subscreenMotion} onBack={back} notify={notify} />
+  if (screen === 'automations') return <AutomationsScreen motion={screenMotion === 'enter' ? ' motion-enter-push' : ''} onBack={back} notify={notify} />
 
-  return <div className="settings-screen">
+  return <div className={`settings-screen${screenMotion === 'return' ? ' motion-return-push' : ''}`}>
     <SettingsHeader title="Настройки" onBack={onClose} />
 
     <SettingsSection title="Основные">
