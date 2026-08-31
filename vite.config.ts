@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { iconSprite } from './scripts/icon-sprite-plugin.ts'
+import { manualChunks } from './scripts/manual-chunks.ts'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -15,10 +16,9 @@ export default defineConfig({
     // understands `backdrop-filter`, iOS Safari needs `-webkit-backdrop-filter`.
     cssTarget: ['chrome111', 'safari15.4', 'firefox121'],
     rollupOptions: {
-      // Let Rollup keep Recharts behind its dynamic imports.  Assigning all of
-      // its transitive modules to a manual chunk made the browser preload the
-      // 119 KB gzip chart bundle before Home had rendered.
-      output: { manualChunks: (id) => id.includes('lottie') ? 'lottie' : id.includes('@tanstack/react-query') ? 'query' : id.includes('/react/') || id.includes('/react-dom/') ? 'vendor' : undefined },
+      // Recharts remains reachable only from the existing dynamic chart imports;
+      // this merely gives its lazy chunk a useful name in build reports.
+      output: { manualChunks },
     },
   },
 })
