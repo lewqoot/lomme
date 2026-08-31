@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BriefcaseBusiness, CalendarDays,
@@ -28,6 +28,7 @@ import { useElasticOverscroll } from './features/motion/useElasticOverscroll'
 import { defaultPeriod, periodKey, resolvePeriod, trendGranularity, type PeriodSelection } from './features/period/model'
 import { SNAPSHOT_POLL_INTERVAL_MS, subscribeToForeground } from './lib/foreground-sync'
 import { DATA_COLORS, UI_COLORS } from './shared/design-tokens'
+import { initialNavigation, navigationReducer, type EditorState, type PageKey } from './features/navigation/state'
 
 // Recharts is by far the heaviest dependency and the home screen never plots
 // anything, so it is pulled in only for a deliberate Insights or Analytics action.
@@ -39,10 +40,7 @@ const warmInsightsChart = () => { void loadInsightsChart() }
 const warmAnalyticsChart = () => { void loadAnalyticsChart() }
 const InsightsChart = lazy(loadInsightsChart)
 
-type PageKey = 'home' | 'insights' | 'analytics' | 'accounts' | 'family' | 'settings' | 'categories' | 'search'
-type EditorState = { mode: 'create'; type: TransactionType } | { mode: 'edit'; transaction: TransactionView }
 type ActionProps = { data: AppSnapshot; onRefresh(): void; notify(text: string): void }
-type NavigationMotion = 'idle' | 'enter-sheet' | 'enter-push' | 'enter-fade' | 'enter-home'
 
 /** One short hand-off: a second tap can replace it instead of waiting for an exit. */
 const NAVIGATION_DURATION_MS = 240
@@ -63,23 +61,16 @@ const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion:
 export default function App() {
   const queryClient = useQueryClient()
   useElasticOverscroll()
-  const [page, setPage] = useState<PageKey>('home')
+  const [navigation, dispatchNavigation] = useReducer(navigationReducer, initialNavigation)
   const [workspaceId, setWorkspaceId] = useState<string>()
   const [accountId, setAccountId] = useState<string | null | undefined>()
   const [inviteHandled, setInviteHandled] = useState(false)
   const [period, setPeriod] = useState<PeriodSelection>(() => defaultPeriod())
-  const [editor, setEditor] = useState<EditorState | null>(null)
   const [toast, setToast] = useState<{ text: string; action?: string; onAction?: () => void } | null>(null)
   const deleteTimers = useRef(new Map<string, number>())
   const [pendingDeleteCount, setPendingDeleteCount] = useState(0)
   const [expandedJournalKey, setExpandedJournalKey] = useState<string | null>(null)
-  const [receding, setReceding] = useState(false)
-  const [navigationMotion, setNavigationMotion] = useState<NavigationMotion>('idle')
-  const [editorClosing, setEditorClosing] = useState(false)
-  const navigationTimer = useRef<number | null>(null)
-  const editorTimer = useRef<number | null>(null)
   const settingsBackRef = useRef<(() => void) | null>(null)
-  const pageHistory = useRef<PageKey[]>([])
   const [capturedInviteToken] = useState<string | null>(() => telegramInviteToken())
 
   const auth = useQuery({ queryKey: ['auth'], queryFn: authenticate, staleTime: Infinity, retry: false })
@@ -163,64 +154,28 @@ export default function App() {
   }, [queryClient])
   useEffect(() => subscribeToForeground(refresh), [refresh])
   useEffect(() => () => {
-    if (navigationTimer.current) window.clearTimeout(navigationTimer.current)
-    if (editorTimer.current) window.clearTimeout(editorTimer.current)
     for (const timer of deleteTimers.current.values()) window.clearTimeout(timer)
     deleteTimers.current.clear()
   }, [])
 
+  useEffect(() => {
+    if (navigation.pending === 'idle') return
+    const pending = navigation.pending; const revision = navigation.revision
+    const timer = window.setTimeout(() => dispatchNavigation({ type: 'settle', pending, revision }), prefersReducedMotion() ? 120 : NAVIGATION_DURATION_MS)
+    return () => window.clearTimeout(timer)
+  }, [navigation.pending, navigation.revision])
   const navigate = useCallback((next: PageKey, history: 'push' | 'pop' = 'push') => {
-    if (next === page) return
-    haptic()
-    if (navigationTimer.current) window.clearTimeout(navigationTimer.current)
-    if (history === 'push') pageHistory.current.push(page)
-    else pageHistory.current.pop()
-
-    // Only Insights rises as a sheet with Home receding beneath it - that gesture is
-    // the one the reference builds a handover for. Every other module simply takes
-    // over the screen; giving them all the sheet meant mounting a second copy of
-    // Home under each one, which showed through as two screens overlapping.
-    const sheetPage = (target: PageKey) => target === 'insights'
-
-    const toHome = next === 'home'
-    const leavingSheet = sheetPage(page)
-    const fromHome = page === 'home'
-    const asSheet = sheetPage(next)
-    const restoringHome = toHome && leavingSheet
-
-    // Change the destination immediately. The old two-stage exit/enter sequence
-    // swallowed every tap made during its 600 ms window; this single entrance can
-    // simply be cancelled and replaced by the next call to navigate().
-    setPage(next)
-    setEditor(null)
-    setReceding(restoringHome || (fromHome && asSheet))
-    setNavigationMotion(
-      fromHome ? (asSheet ? 'enter-sheet' : 'enter-fade')
-        : toHome ? (restoringHome ? 'idle' : 'enter-home')
-          : 'enter-push',
-    )
-    // A smooth reset made Home visibly travel after its destination had mounted.
-    window.scrollTo({ top: 0, behavior: 'auto' })
-    navigationTimer.current = window.setTimeout(() => {
-      setReceding(false)
-      setNavigationMotion('idle')
-      navigationTimer.current = null
-    }, prefersReducedMotion() ? 120 : NAVIGATION_DURATION_MS)
-  }, [page])
+    if (next === navigation.page) return
+    haptic(); dispatchNavigation({ type: 'navigate', next, history }); window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [navigation.page])
   const goBack = useCallback(() => {
-    const previous = pageHistory.current.at(-1) || 'home'
+    const previous = navigation.history.at(-1) || 'home'
     navigate(previous, 'pop')
-  }, [navigate])
+  }, [navigate, navigation.history])
   const openInsights = () => { warmInsightsChart(); navigate('insights') }
   const closeEditor = useCallback(() => {
-    if (editorClosing) return
-    setEditorClosing(true)
-    editorTimer.current = window.setTimeout(() => {
-      setEditor(null)
-      setEditorClosing(false)
-      editorTimer.current = null
-    }, prefersReducedMotion() ? 120 : NAVIGATION_DURATION_MS)
-  }, [editorClosing])
+    dispatchNavigation({ type: 'close-editor' })
+  }, [])
   // Back is always an explicit in-app control. Relying on Telegram's native
   // BackButton left iOS clients without any visible way to return, while showing
   // both controls duplicated it on clients that did support the bridge.
@@ -237,7 +192,7 @@ export default function App() {
 
   const scheduleDelete = (transaction: TransactionView) => {
     if (deleteTimers.current.has(transaction.id)) return
-    setEditor(null)
+    dispatchNavigation({ type: 'dismiss-editor' })
     void queryClient.cancelQueries({ queryKey: ['snapshot'] })
     queryClient.setQueryData<AppSnapshot>(snapshotKey, (current) => {
       if (!current) return current
@@ -306,16 +261,16 @@ export default function App() {
   />
   if (snapshot.isPending) return <Loading />
   if (snapshot.isError || !data) return <AuthError error={snapshot.error} retry={() => snapshot.refetch()} />
-  if (editor) return <>
-    {page === 'home' && <div className="receding-under editor-underlay" aria-hidden="true"><HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding={false} onEditor={setEditor} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} /></div>}
-    <TransactionEditor closing={editorClosing} data={data} state={editor} onClose={closeEditor} onSaved={() => { refresh(); haptic('success'); setToast({ text: 'Операция сохранена' }); closeEditor() }} onDelete={scheduleDelete} />
+  if (navigation.editor) return <>
+    {navigation.page === 'home' && <div className="receding-under editor-underlay" aria-hidden="true"><HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding={false} onEditor={(editor) => dispatchNavigation({ type: 'open-editor', editor })} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} /></div>}
+    <TransactionEditor closing={navigation.editorClosing} data={data} state={navigation.editor} onClose={closeEditor} onSaved={() => { refresh(); haptic('success'); setToast({ text: 'Операция сохранена' }); closeEditor() }} onDelete={scheduleDelete} />
   </>
 
-  return <main className={`app-shell${page !== 'home' ? ' overlay-shell' : ''}${navigationMotion !== 'idle' ? ` motion-${navigationMotion}` : ''}`}>
-    {(receding || page === 'insights') && page !== 'home' && <div className={`receding-under${page === 'insights' ? ' peeking' : ''}`} inert aria-hidden="true"><HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding onEditor={setEditor} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} /></div>}
-    {page === 'home' && <HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding={receding} onEditor={setEditor} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} />}
-    {page === 'insights' && <InsightsPage data={data} period={period} setPeriod={setPeriod} onClose={goBack} />}
-    {page === 'analytics' && <AnalyticsPage
+  return <main className={`app-shell${navigation.page !== 'home' ? ' overlay-shell' : ''}${navigation.motion !== 'idle' ? ` motion-${navigation.motion}` : ''}`}>
+    {(navigation.receding || navigation.page === 'insights') && navigation.page !== 'home' && <div className={`receding-under${navigation.page === 'insights' ? ' peeking' : ''}`} inert aria-hidden="true"><HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding onEditor={(editor) => dispatchNavigation({ type: 'open-editor', editor })} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} /></div>}
+    {navigation.page === 'home' && <HomeLayer data={data} totalBalance={totalBalance} period={period} setPeriod={setPeriod} receding={navigation.receding} onEditor={(editor) => dispatchNavigation({ type: 'open-editor', editor })} onInsights={openInsights} onNavigate={navigate} onDelete={scheduleDelete} onLoadMore={requestMoreTransactions} loadingMore={loadMore.isPending} />}
+    {navigation.page === 'insights' && <InsightsPage data={data} period={period} setPeriod={setPeriod} onClose={goBack} />}
+    {navigation.page === 'analytics' && <AnalyticsPage
       data={data}
       period={period}
       setPeriod={setPeriod}
@@ -323,11 +278,11 @@ export default function App() {
       glyph={(icon) => <CategoryGlyph icon={icon ?? undefined} />}
       onShare={(text) => { void navigator.clipboard?.writeText(text); haptic('success'); setToast({ text: 'Сводка скопирована' }) }}
     />}
-    {page === 'accounts' && <AccountsPage data={data} workspace={activeWorkspace} onSelect={async (nextWorkspaceId, nextAccountId) => { await selectAccount(nextWorkspaceId, nextAccountId); goBack() }} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
-    {page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} onEdit={(transaction) => setEditor({ mode: 'edit', transaction })} onClose={goBack} periodLabel={range.label} />}
-    {page === 'family' && <FamilyPage data={data} onSelect={selectAccount} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
-    {page === 'settings' && <SettingsPage backRef={settingsBackRef} notify={(text) => setToast({ text })} onNavigate={navigate} onClose={goBack} />}
-    {page === 'categories' && <CategoriesPage data={data} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
+    {navigation.page === 'accounts' && <AccountsPage data={data} workspace={activeWorkspace} onSelect={async (nextWorkspaceId, nextAccountId) => { await selectAccount(nextWorkspaceId, nextAccountId); goBack() }} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
+    {navigation.page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} onEdit={(editor) => dispatchNavigation({ type: 'open-editor', editor: { mode: 'edit', transaction: editor } })} onClose={goBack} periodLabel={range.label} />}
+    {navigation.page === 'family' && <FamilyPage data={data} onSelect={selectAccount} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
+    {navigation.page === 'settings' && <SettingsPage backRef={settingsBackRef} notify={(text) => setToast({ text })} onNavigate={navigate} onClose={goBack} />}
+    {navigation.page === 'categories' && <CategoriesPage data={data} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
     {toast && <ToastNotice key={`${toast.text}:${toast.action || ''}`} toast={toast} onDismiss={() => setToast(null)} />}
   </main>
 }

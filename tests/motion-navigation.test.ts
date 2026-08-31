@@ -23,10 +23,13 @@ function keyframeBlocks(source: string) {
 }
 
 describe('motion and navigation guardrails', () => {
-  it('uses one 240 ms navigation hand-off that a later tap can replace', () => {
+  it('uses one reducer-owned 240 ms navigation hand-off that a later tap can replace', () => {
     expect(app).toContain('const NAVIGATION_DURATION_MS = 240')
     expect(app).not.toContain("navigationMotion.startsWith('exit')")
-    expect(app).toMatch(/setPage\(next\)[\s\S]*?setNavigationMotion\([\s\S]*?setTimeout\([\s\S]*?NAVIGATION_DURATION_MS/)
+    expect(app).toContain('useReducer(navigationReducer, initialNavigation)')
+    expect(app).toContain("dispatchNavigation({ type: 'navigate', next, history })")
+    expect(app).toContain("dispatchNavigation({ type: 'settle', pending, revision })")
+    expect(app).not.toMatch(/\b(?:pageHistory|navigationTimer|editorTimer|setNavigationMotion|setReceding)\b/)
     expect(settings).toContain('const SETTINGS_NAVIGATION_DURATION_MS = 240')
     expect(settings).not.toContain('screenClosing')
     expect(settings).toContain("move('root', 'return')")
