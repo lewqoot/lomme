@@ -19,7 +19,6 @@ import {
   legacyPreviewMigrationSchema,
   quickEntrySchema,
   reorderCategoriesSchema,
-  themeSchema,
   transactionPageQuerySchema,
   updateAccountSchema,
   updateCategorySchema,
@@ -272,7 +271,6 @@ export async function buildApp(store: FinanceStore) {
   app.post('/api/v1/workspaces/:id/invites', { preHandler: requireUser }, async (request, reply) => { const { id } = parseId(request.params); return reply.code(201).send(await store.createInvite(request.currentUser!.id, id)) })
   app.post('/api/v1/invites/accept', { preHandler: requireUser }, async (request) => { const body = request.body as { token?: unknown }; if (typeof body?.token !== 'string') throw new AppError(400, 'VALIDATION_ERROR', 'Не передан токен приглашения'); return store.acceptInvite(request.currentUser!.id, body.token) })
   app.delete('/api/v1/workspaces/:id/members/:memberId', { preHandler: requireUser }, async (request, reply) => { const params = request.params as { id: string; memberId: string }; parse(uuidSchema, params.id); parse(uuidSchema, params.memberId); await store.removeMember(request.currentUser!.id, params.id, params.memberId); return reply.code(204).send() })
-  app.put('/api/v1/me/theme', { preHandler: requireUser }, async (request, reply) => { const theme = parse(themeSchema, (request.body as { theme?: unknown })?.theme); await store.updateTheme(request.currentUser!.id, theme); return reply.code(204).send() })
   app.post('/api/v1/migrations/design-preview', { config: { rateLimit: { max: 8, timeWindow: '1 hour' } } }, async (request) => {
     const input = parse(legacyPreviewMigrationSchema, request.body)
     let identity: TelegramIdentity

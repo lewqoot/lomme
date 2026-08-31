@@ -38,7 +38,6 @@ export const users = pgTable('users', {
   lastName: text('last_name'),
   timezone: text('timezone').default('Europe/Moscow').notNull(),
   currency: text('currency').default('RUB').notNull(),
-  theme: text('theme').default('system').notNull(),
   interfaceLanguage: text('interface_language').default('ru').notNull(),
   voiceLanguage: text('voice_language').default('ru-RU').notNull(),
   firstDayOfWeek: integer('first_day_of_week').default(1).notNull(),

@@ -1,5 +1,3 @@
-import { NATIVE_COLORS } from '../shared/design-tokens.js'
-
 /**
  * Telegram Mini App bootstrap shared by the real app and the design preview.
  *
@@ -68,16 +66,12 @@ export const isTelegram = () => {
   return Boolean(app && (app.initData || (platform && platform !== 'unknown')))
 }
 
-let telegramThemePreference: 'system' | 'light' | 'dark' = 'system'
-
-export function syncTelegramTheme(theme: 'system' | 'light' | 'dark' = telegramThemePreference) {
-  telegramThemePreference = theme
+/** Lomme deliberately keeps one light appearance even when Telegram is dark. */
+export function syncTelegramTheme() {
   const app = webApp()
   if (!app || !isTelegram()) return
-  const dark = theme === 'dark' || (theme === 'system' && app.colorScheme === 'dark')
-  const surface = dark ? NATIVE_COLORS.darkSurface : NATIVE_COLORS.lightSurface
-  app.setHeaderColor?.(surface)
-  app.setBackgroundColor?.(surface)
+  app.setHeaderColor?.('#ffffff')
+  app.setBackgroundColor?.('#ffffff')
 }
 
 /** Prefer Telegram's native clipboard bridge on iPhone. Safari's clipboard API
@@ -246,7 +240,6 @@ export function initTelegram() {
   // and changing swipe behavior while iOS is mounting a fullscreen Main App can
   // recreate the WebView after the first successful snapshot.
   syncTelegramTheme()
-  app.onEvent?.('themeChanged', () => syncTelegramTheme(telegramThemePreference))
   document.documentElement.classList.add('in-telegram')
   syncViewport(app)
 }

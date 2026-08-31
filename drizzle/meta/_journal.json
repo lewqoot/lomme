@@ -64,6 +64,13 @@
       "when": 1788122484000,
       "tag": "0008_other_category_icon",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788160000000,
+      "tag": "0009_remove_theme_preference",
+      "breakpoints": true
     }
   ]
 }
