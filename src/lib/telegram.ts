@@ -123,15 +123,34 @@ function startParamFromLocation() {
   return null
 }
 
+/** Whatever `startapp=` carried, from whichever source published it first. */
+function launchParam(serverStartParam?: string | null) {
+  const app = webApp()
+  const fromSignedInitData = app?.initData ? new URLSearchParams(app.initData).get('start_param') : null
+  return serverStartParam || app?.initDataUnsafe?.start_param || fromSignedInitData || startParamFromLocation() || ''
+}
+
 /** The Bot API encodes wallet invites as `invite_<opaque token>` in startapp.
  * The serverStartParam argument comes from signature-verified initData. */
 export function telegramInviteToken(serverStartParam?: string | null): string | null {
-  const app = webApp()
-  const fromSignedInitData = app?.initData ? new URLSearchParams(app.initData).get('start_param') : null
-  const value = serverStartParam || app?.initDataUnsafe?.start_param || fromSignedInitData || startParamFromLocation() || ''
+  const value = launchParam(serverStartParam)
   if (!value.startsWith('invite_')) return null
   const token = value.slice('invite_'.length)
   return /^[A-Za-z0-9_-]{20,120}$/.test(token) ? token : null
+}
+
+/**
+ * Screens the bot is allowed to open directly. Keeping this an explicit list
+ * means a stale or mistyped link lands on the home screen rather than
+ * somewhere unexpected, and a button in the chat can promise a real
+ * destination instead of "the app".
+ */
+const LAUNCH_TARGETS = ['shortcut', 'notifications', 'family', 'analytics'] as const
+export type LaunchTarget = typeof LAUNCH_TARGETS[number]
+
+export function telegramLaunchTarget(serverStartParam?: string | null): LaunchTarget | null {
+  const value = launchParam(serverStartParam)
+  return (LAUNCH_TARGETS as readonly string[]).includes(value) ? value as LaunchTarget : null
 }
 
 /** Keep a launch token captured before async Telegram authentication. iOS may

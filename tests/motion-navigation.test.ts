@@ -26,7 +26,8 @@ describe('motion and navigation guardrails', () => {
   it('uses one reducer-owned 240 ms navigation hand-off that a later tap can replace', () => {
     expect(app).toContain('const NAVIGATION_DURATION_MS = 240')
     expect(app).not.toContain("navigationMotion.startsWith('exit')")
-    expect(app).toContain('useReducer(navigationReducer, initialNavigation)')
+    expect(app).toMatch(/useReducer\(\s*navigationReducer,/)
+    expect(app).toContain('navigationFromLaunch(')
     expect(app).toContain("dispatchNavigation({ type: 'navigate', next, history })")
     expect(app).toContain("dispatchNavigation({ type: 'settle', pending, revision })")
     expect(app).not.toMatch(/\b(?:pageHistory|navigationTimer|editorTimer|setNavigationMotion|setReceding)\b/)

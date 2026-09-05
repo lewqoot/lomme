@@ -7,7 +7,7 @@ const APP_URL = 'https://lomme.example'
 
 function context(overrides: Partial<RouterContext> = {}): RouterContext {
   return {
-    appUrl: APP_URL,
+    links: { appUrl: APP_URL, botUsername: 'lomme_test_bot' },
     noteBotContact: async () => ({ known: false }),
     resolveInvite: async () => null,
     recordEntry: async () => ({ status: 'recorded', entry: { categoryName: 'Продукты', categoryGuessed: false, amountKopecks: 320_000 } }),
@@ -46,12 +46,24 @@ describe('bot router', () => {
     expect(seen).toEqual([777])
   })
 
-  it('прячет кнопку приложения, когда адрес не https', async () => {
-    const action = await routeUpdate(privateMessage('/start'), context({ appUrl: null }))
+  it('ведёт кнопками на конкретные экраны, а не просто в приложение', async () => {
+    const action = await routeUpdate(privateMessage('/start'), context())
+
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    const links = action.message.keyboard!.flat().map((button) => 'url' in button ? button.url : null).filter(Boolean)
+    expect(links).toEqual([
+      'https://t.me/lomme_test_bot?startapp=shortcut&mode=fullscreen',
+      'https://t.me/lomme_test_bot?startapp=notifications&mode=fullscreen',
+    ])
+  })
+
+  it('прячет кнопки, которым некуда вести', async () => {
+    // Локальный запуск: адрес не https, а имя бота ещё не получено.
+    const action = await routeUpdate(privateMessage('/start'), context({ links: { appUrl: null, botUsername: null } }))
 
     if (action.kind !== 'send') throw new Error('ожидали отправку')
     expect(JSON.stringify(action.message.keyboard)).not.toContain('web_app')
-    expect(action.message.keyboard?.[0]?.[0]).toMatchObject({ callback_data: 'help' })
+    expect(action.message.keyboard).toEqual([[{ text: 'Как это работает', callback_data: 'help' }]])
   })
 
   it('отвечает справкой на команду и на кнопку', async () => {

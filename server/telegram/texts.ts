@@ -20,11 +20,23 @@ export const BOT_COMMANDS = [
 const HELP_BUTTON = { text: 'Как это работает', callback_data: 'help' } as const
 
 /**
- * Telegram rejects a web_app button whose url is not https, which is every
- * local run. Callers pass null there and the message goes out without it.
+ * Where the bot's buttons can point. Both parts can be missing — a local run
+ * has no https address, and the username is only known once the Bot API has
+ * answered — and every builder below simply drops the buttons it cannot aim.
  */
-function openApp(appUrl: string | null): InlineKeyboard {
+export type LinkContext = { appUrl: string | null; botUsername: string | null }
+
+function openApp({ appUrl }: LinkContext): InlineKeyboard {
   return appUrl ? [[{ text: 'Открыть Lomme', web_app: { url: appUrl } }]] : []
+}
+
+/**
+ * A link into one screen of the Mini App. `startapp` values are the list the
+ * client knows in `telegramLaunchTarget`; anything else lands on the home
+ * screen, so the two sides have to be changed together.
+ */
+function screenLink({ botUsername }: LinkContext, screen: 'shortcut' | 'notifications' | 'family' | 'analytics', text: string) {
+  return botUsername ? [{ text, url: `https://t.me/${botUsername}?startapp=${screen}&mode=fullscreen` }] : []
 }
 
 /** The same rendering the shortcut uses, so both confirmations read alike. */
@@ -32,7 +44,7 @@ export function money(amountKopecks: number) {
   return `${(amountKopecks / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`
 }
 
-export function welcome(appUrl: string | null): BotMessage {
+export function welcome(links: LinkContext): BotMessage {
   return {
     text: [
       '👋 Привет! Я Lomme.',
@@ -44,18 +56,23 @@ export function welcome(appUrl: string | null): BotMessage {
       '',
       'А в приложении — аналитика, история и все настройки.',
     ].join('\n'),
-    keyboard: [...openApp(appUrl), [HELP_BUTTON]],
+    keyboard: [
+      ...openApp(links),
+      screenLink(links, 'shortcut', '⚡ Записывать с экрана блокировки'),
+      screenLink(links, 'notifications', '🔔 Напоминания'),
+      [HELP_BUTTON],
+    ].filter((row) => row.length),
   }
 }
 
-export function welcomeBack(appUrl: string | null): BotMessage {
+export function welcomeBack(links: LinkContext): BotMessage {
   return {
     text: 'С возвращением 👋\n\nНапиши трату сюда или открой приложение.',
-    keyboard: openApp(appUrl),
+    keyboard: openApp(links),
   }
 }
 
-export function help(appUrl: string | null): BotMessage {
+export function help(links: LinkContext): BotMessage {
   return {
     text: [
       'Как со мной работать',
@@ -68,11 +85,11 @@ export function help(appUrl: string | null): BotMessage {
       '',
       'Порядок не важен. Понимаю названия магазинов и сокращения, категорию подберу сам. Ошибусь — поправишь в приложении.',
       '',
-      'Хочешь ещё быстрее? В приложении «Настройки» → «Быстрый ввод» ставит шорткат на экран блокировки — тогда Telegram открывать не надо совсем.',
+      'Хочешь ещё быстрее? Шорткат ставит запись трат на экран блокировки — тогда Telegram открывать не надо совсем.',
       '',
       'Аналитика, кошельки и категории — тоже в приложении.',
     ].join('\n'),
-    keyboard: openApp(appUrl),
+    keyboard: [...openApp(links), screenLink(links, 'shortcut', '⚡ Настроить шорткат')].filter((row) => row.length),
   }
 }
 
@@ -109,14 +126,14 @@ export function unsupportedAttachment(): BotMessage {
 }
 
 /** They messaged the bot before ever opening the Mini App, so there is no wallet. */
-export function noAccountYet(appUrl: string | null): BotMessage {
+export function noAccountYet(links: LinkContext): BotMessage {
   return {
     text: [
       'Похоже, ты ещё не открывал приложение.',
       '',
       'Открой Lomme — заведу кошелёк, и дальше можно писать траты прямо сюда.',
     ].join('\n'),
-    keyboard: openApp(appUrl),
+    keyboard: openApp(links),
   }
 }
 
@@ -165,13 +182,13 @@ export function accountInviteExpired(): BotMessage {
 }
 
 /** Text with no number in it at all: not a failed entry, just a hello. */
-export function fallback(appUrl: string | null): BotMessage {
+export function fallback(links: LinkContext): BotMessage {
   return {
     text: [
       'Я записываю траты. Напиши сумму и что это — например, 450 кофе.',
       '',
       'Аналитика и всё остальное — в приложении.',
     ].join('\n'),
-    keyboard: openApp(appUrl),
+    keyboard: openApp(links),
   }
 }

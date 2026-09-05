@@ -409,8 +409,11 @@ export async function buildApp(store: FinanceStore) {
       return reply.send({ ok: true })
     }
 
+    // The username is needed for the deep-linked buttons; without it they are
+    // dropped rather than aimed at a guess.
+    const linkedBotUsername = await inviteBotUsername().catch(() => null)
     const action = await routeUpdate(update, {
-      appUrl: telegramWebAppUrl(),
+      links: { appUrl: telegramWebAppUrl(), botUsername: linkedBotUsername },
       noteBotContact: (telegramUserId) => store.noteBotContact(telegramUserId),
       recordEntry: async (telegramUserId, amount, text) => {
         try {

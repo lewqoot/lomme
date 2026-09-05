@@ -43,7 +43,8 @@ export type RecordOutcome =
   | { status: 'failed' }
 
 export type RouterContext = {
-  appUrl: string | null
+  /** Where the bot's buttons may point; either half can be missing. */
+  links: texts.LinkContext
   /** Marks the chat as reachable and reports whether this person is already a user. */
   noteBotContact(telegramUserId: number): Promise<{ known: boolean }>
   /** Resolves an invite token into a wallet name and its deep link. */
@@ -78,7 +79,7 @@ export async function routeUpdate(update: TelegramUpdate, context: RouterContext
   if (callback) {
     const chatId = callback.message?.chat?.id
     if (!Number.isSafeInteger(chatId)) return { kind: 'none' }
-    const message = callback.data === 'help' ? texts.help(context.appUrl) : texts.fallback(context.appUrl)
+    const message = callback.data === 'help' ? texts.help(context.links) : texts.fallback(context.links)
     return { kind: 'answer', callbackQueryId: callback.id, chatId: chatId!, message }
   }
 
@@ -109,24 +110,24 @@ export async function routeUpdate(update: TelegramUpdate, context: RouterContext
 
   if (command === 'start') {
     const known = telegramUserId !== null ? (await context.noteBotContact(telegramUserId)).known : false
-    return send(known ? texts.welcomeBack(context.appUrl) : texts.welcome(context.appUrl))
+    return send(known ? texts.welcomeBack(context.links) : texts.welcome(context.links))
   }
 
   if (telegramUserId !== null) await context.noteBotContact(telegramUserId)
 
-  if (command === 'help') return send(texts.help(context.appUrl))
-  if (command === 'app') return send(texts.welcomeBack(context.appUrl))
-  if (command) return send(texts.fallback(context.appUrl))
+  if (command === 'help') return send(texts.help(context.links))
+  if (command === 'app') return send(texts.welcomeBack(context.links))
+  if (command) return send(texts.fallback(context.links))
 
   // Anything without a digit is conversation, not a failed expense: answering
   // "не нашёл сумму" to "привет" would be a non sequitur.
-  if (!HAS_DIGIT.test(text) || telegramUserId === null) return send(texts.fallback(context.appUrl))
+  if (!HAS_DIGIT.test(text) || telegramUserId === null) return send(texts.fallback(context.links))
 
   const split = splitQuickInput(text)
   if (!split) return send(texts.amountNotFound())
 
   const outcome = await context.recordEntry(telegramUserId, split.amount, split.text)
-  if (outcome.status === 'no-account') return send(texts.noAccountYet(context.appUrl))
+  if (outcome.status === 'no-account') return send(texts.noAccountYet(context.links))
   if (outcome.status === 'failed') return send(texts.couldNotRecord())
   return send(confirmation(outcome.entry))
 }

@@ -10,7 +10,7 @@ import { differenceInCalendarDays, differenceInCalendarMonths, format, isSameDay
 import { ru } from 'date-fns/locale'
 import type { AccountInvitePreview, AccountView, AppSnapshot, TransactionPage, TransactionType, TransactionView } from './shared/contracts'
 import { api, ApiError, authenticate, haptic } from './lib/api'
-import { copyText, ensureTelegramFullscreen, haptics, resolveTelegramInviteToken, setBackButton, shareTelegramLink, telegramInviteToken } from './lib/telegram'
+import { copyText, ensureTelegramFullscreen, haptics, resolveTelegramInviteToken, setBackButton, shareTelegramLink, telegramInviteToken, telegramLaunchTarget, type LaunchTarget } from './lib/telegram'
 import { FALLBACK_ICON, ICON_IDS } from './config/icons'
 import { ensureIconLibrary, isCoreIcon, isIconLibraryReady } from './lib/icon-library'
 import { tint } from './lib/palette'
@@ -28,7 +28,7 @@ import { useElasticOverscroll } from './features/motion/useElasticOverscroll'
 import { defaultPeriod, periodKey, resolvePeriod, trendGranularity, type PeriodSelection } from './features/period/model'
 import { SNAPSHOT_POLL_INTERVAL_MS, subscribeToForeground } from './lib/foreground-sync'
 import { DATA_COLORS, UI_COLORS } from './shared/design-tokens'
-import { initialNavigation, navigationReducer, type EditorState, type PageKey } from './features/navigation/state'
+import { navigationFromLaunch, navigationReducer, type EditorState, type PageKey } from './features/navigation/state'
 
 // Recharts is by far the heaviest dependency and the home screen never plots
 // anything, so it is pulled in only for a deliberate Insights or Analytics action.
@@ -61,7 +61,15 @@ const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion:
 export default function App() {
   const queryClient = useQueryClient()
   useElasticOverscroll()
-  const [navigation, dispatchNavigation] = useReducer(navigationReducer, initialNavigation)
+  // A bot button promises a specific screen. Resolving the link before the
+  // first render opens it without an effect that would later fight Back.
+  const [launchTarget] = useState<LaunchTarget | null>(() => telegramLaunchTarget())
+  const settingsEntry = launchTarget === 'shortcut' ? 'automations' : launchTarget === 'notifications' ? 'notifications' : null
+  const [navigation, dispatchNavigation] = useReducer(
+    navigationReducer,
+    launchTarget,
+    (target) => navigationFromLaunch(target === 'shortcut' || target === 'notifications' ? 'settings' : target),
+  )
   const [workspaceId, setWorkspaceId] = useState<string>()
   const [accountId, setAccountId] = useState<string | null | undefined>()
   const [inviteHandled, setInviteHandled] = useState(false)
@@ -281,7 +289,7 @@ export default function App() {
     {navigation.page === 'accounts' && <AccountsPage data={data} workspace={activeWorkspace} onSelect={async (nextWorkspaceId, nextAccountId) => { await selectAccount(nextWorkspaceId, nextAccountId); goBack() }} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
     {navigation.page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} onEdit={(editor) => dispatchNavigation({ type: 'open-editor', editor: { mode: 'edit', transaction: editor } })} onClose={goBack} periodLabel={range.label} />}
     {navigation.page === 'family' && <FamilyPage data={data} onSelect={selectAccount} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
-    {navigation.page === 'settings' && <SettingsPage backRef={settingsBackRef} notify={(text) => setToast({ text })} onNavigate={navigate} onClose={goBack} />}
+    {navigation.page === 'settings' && <SettingsPage backRef={settingsBackRef} notify={(text) => setToast({ text })} onNavigate={navigate} onClose={goBack} initialScreen={settingsEntry} />}
     {navigation.page === 'categories' && <CategoriesPage data={data} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
     {toast && <ToastNotice key={`${toast.text}:${toast.action || ''}`} toast={toast} onDismiss={() => setToast(null)} />}
   </main>

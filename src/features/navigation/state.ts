@@ -8,6 +8,16 @@ export type NavigationAction = { type: 'navigate'; next: PageKey; history: 'push
 
 export const initialNavigation: NavigationState = { page: 'home', history: [], motion: 'idle', receding: false, editor: null, editorClosing: false, pending: 'idle', revision: 0 }
 
+/**
+ * A launch that named a screen starts there, with home behind it so Back leads
+ * somewhere sensible. Deciding this before the first render keeps it out of an
+ * effect, which would otherwise fight a later Back press.
+ */
+export function navigationFromLaunch(page: PageKey | null): NavigationState {
+  if (!page || page === 'home') return initialNavigation
+  return { ...initialNavigation, page, history: ['home'] }
+}
+
 export function navigationReducer(state: NavigationState, action: NavigationAction): NavigationState {
   if (action.type === 'navigate') {
     if (action.next === state.page) return state

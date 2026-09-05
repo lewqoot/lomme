@@ -17,10 +17,12 @@ type Props = {
   notify(text: string): void
   onNavigate(page: 'categories' | 'family'): void
   onClose(): void
+  /** A bot deep link asked for one screen in particular; read once, on mount. */
+  initialScreen?: 'automations' | 'notifications' | null
 }
 
-export function SettingsPage({ backRef, notify, onNavigate, onClose }: Props) {
-  const [screen, setScreen] = useState<SettingsScreen>('root')
+export function SettingsPage({ backRef, notify, onNavigate, onClose, initialScreen }: Props) {
+  const [screen, setScreen] = useState<SettingsScreen>(initialScreen ?? 'root')
   const [screenMotion, setScreenMotion] = useState<SettingsMotion>('idle')
   const screenTimer = useRef<number | null>(null)
 
