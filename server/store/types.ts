@@ -69,6 +69,14 @@ export type BotCategoryChoices = {
 
 export type BotCorrection = { categoryName: string; amountKopecks: number; keyword: string | null }
 
+/** Reasons a healthy process can still be unfit to take requests. */
+export type StoreReadiness = {
+  ready: boolean
+  database: 'ok' | 'memory' | 'unreachable'
+  migrations: { applied: number; expected: number } | null
+  detail?: string
+}
+
 export type SessionUser = {
   id: string
   firstName: string
@@ -157,5 +165,10 @@ export interface FinanceStore {
   revokeBotWriteAccess(telegramUserId: number): Promise<void>
   runWorkerBatch(): Promise<{ expiredMedia: number; forgottenUpdates: number }>
   health(): Promise<{ database: 'ok' | 'memory' }>
+  /**
+   * Whether this process may serve traffic: the database answers *and* the
+   * schema it answers with is the one this build expects.
+   */
+  readiness(): Promise<StoreReadiness>
   close(): Promise<void>
 }

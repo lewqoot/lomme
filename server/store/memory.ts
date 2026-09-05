@@ -31,6 +31,7 @@ import type {
   QuickEntryInput,
   ReminderSettingsInput,
   SharedActivity,
+  StoreReadiness,
   SessionUser,
   TransactionInput,
   TransactionUpdate,
@@ -656,6 +657,7 @@ export class MemoryFinanceStore implements FinanceStore {
 
   async runWorkerBatch() { this.processedUpdates.clear(); return { expiredMedia: 0, forgottenUpdates: 0 } }
   async health() { return { database: 'memory' as const } }
+  async readiness(): Promise<StoreReadiness> { return { ready: true, database: 'memory', migrations: null } }
   async close() {}
 
   private publicUser(user: InternalUser): SessionUser { return { id: user.id, firstName: user.firstName, username: user.username, timezone: user.timezone } }

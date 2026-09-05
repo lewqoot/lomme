@@ -1,7 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../server/app.js'
 import { createTelegramInitDataForTest, type TelegramIdentity } from '../server/auth/telegram.js'
 import { MemoryFinanceStore } from '../server/store/memory.js'
+
+/**
+ * Записи переноса датированы августом, а снапшот по умолчанию отдаёт текущий
+ * месяц — поэтому тест обязан задавать «сейчас» сам. Без этого он проходил
+ * весь август и начал падать первого сентября, ничего не сообщая о коде.
+ */
+const NOW = new Date('2026-08-28T12:00:00.000Z')
 
 describe('перенос локального design-preview в аккаунт Telegram', () => {
   const token = 'migration-test-token'
@@ -9,13 +16,15 @@ describe('перенос локального design-preview в аккаунт T
   let app: Awaited<ReturnType<typeof buildApp>>
 
   beforeEach(async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(NOW)
     process.env.TELEGRAM_BOT_TOKEN = token
     process.env.APP_URL = 'https://lomme-production.up.railway.app'
     process.env.LEGACY_PREVIEW_URL = 'https://design-preview-production.up.railway.app'
     process.env.ALLOW_DEV_AUTH = 'false'
     app = await buildApp(new MemoryFinanceStore())
   })
-  afterEach(async () => { await app.close() })
+  afterEach(async () => { await app.close(); vi.useRealTimers() })
 
   const initData = () => createTelegramInitDataForTest(identity, token)
   const payload = () => ({

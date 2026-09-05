@@ -20,10 +20,13 @@ import { DATA_COLORS } from '../../src/shared/design-tokens.js'
 import { resolveRange, type SnapshotRange } from '../lib/range.js'
 import { decodeTransactionCursor, encodeTransactionCursor } from '../lib/transaction-cursor.js'
 import { AppError, conflict, forbidden, notFound } from '../lib/errors.js'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import type { DeliveryKind, ReminderCandidate } from '../telegram/reminders.js'
 import { hashToken, randomToken } from '../lib/security.js'
 import type {
   AccountInput,
+  StoreReadiness,
   ReminderSettingsInput,
   SharedActivity,
   AccountUpdate,
@@ -49,6 +52,25 @@ import { expenseCategories, incomeCategories } from './default-categories.js'
  * people who asked for the bot, not a broadcast.
  */
 const REMINDER_DEFAULTS = { enabled: true, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
+
+let cachedMigrationCount: number | undefined
+
+/**
+ * How many migrations this build ships, read from Drizzle's own journal — the
+ * same file `db:migrate` walks. Returning 0 when it cannot be read keeps the
+ * check from failing a deploy over a missing file: an unreadable journal is a
+ * packaging problem, not evidence that the schema is behind.
+ */
+function expectedMigrationCount() {
+  if (cachedMigrationCount !== undefined) return cachedMigrationCount
+  try {
+    const journal = readFileSync(path.join(process.cwd(), 'drizzle', 'meta', '_journal.json'), 'utf8')
+    cachedMigrationCount = (JSON.parse(journal) as { entries?: unknown[] }).entries?.length ?? 0
+  } catch {
+    cachedMigrationCount = 0
+  }
+  return cachedMigrationCount
+}
 
 const { Pool } = pg
 type Queryable = Pick<PoolClient, 'query'>
@@ -760,6 +782,34 @@ export class PostgresFinanceStore implements FinanceStore {
   }
 
   async health() { await this.pool.query('SELECT 1'); return { database: 'ok' as const } }
+
+  /**
+   * A reachable database is not the same as a usable one. A deploy whose
+   * pre-deploy migration step failed still answers SELECT 1 perfectly, and
+   * would then serve requests against a schema missing the columns this build
+   * writes to — so readiness compares what has been applied with what this
+   * build ships.
+   */
+  async readiness(): Promise<StoreReadiness> {
+    const expected = expectedMigrationCount()
+    try {
+      const applied = await this.pool.query<{ count: string }>(
+        `SELECT count(*)::text FROM drizzle.__drizzle_migrations`)
+      const count = Number(applied.rows[0]?.count ?? 0)
+      const migrations = { applied: count, expected }
+      if (expected > 0 && count < expected) {
+        return { ready: false, database: 'ok', migrations, detail: 'migrations behind this build' }
+      }
+      return { ready: true, database: 'ok', migrations }
+    } catch (error) {
+      return {
+        ready: false,
+        database: 'unreachable',
+        migrations: null,
+        detail: error instanceof Error ? error.message : 'database check failed',
+      }
+    }
+  }
   async close() { await this.pool.end() }
 
   private async transactionPageRows(workspaceId: string, range: { start: Date; end: Date }, rawCursor?: string, requestedLimit = 20, accountIds?: string[]): Promise<TransactionPage> {
