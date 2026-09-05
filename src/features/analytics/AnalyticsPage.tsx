@@ -57,7 +57,9 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
 
   // Sankey shows both directions at once, so its own type segment would be a lie.
   const showsBothDirections = kind === 'sankey'
-  const empty = slices.length === 0
+  const empty = showsBothDirections
+    ? income.visible.length === 0 && expense.visible.length === 0
+    : visible.length === 0
   const account = data.activeAccountId
     ? data.accounts.find((item) => item.id === data.activeAccountId)
     : undefined

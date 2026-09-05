@@ -6,6 +6,7 @@ import { format, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { tint } from '../lib/palette'
 import type { ChartKind, Slice } from '../features/analytics/model'
+import { buildSankeyLayout, groupSmallDonutSlices } from '../shared/chart-integrity'
 import { useReducedMotion } from '../features/motion/useReducedMotion'
 import { CHART_TYPE, UI_COLORS } from '../shared/design-tokens'
 
@@ -42,33 +43,15 @@ export default function AnalyticsChart(props: {
  * tinted body filling the ring, separated by hairline white gaps.
  */
 function Donut({ slices, totalKopecks, animate }: { slices: Slice[]; totalKopecks: number; animate: boolean }) {
-  // A category worth half a percent is two degrees of arc, which renders as a torn
-  // hairline rather than a segment. Give every slice a legible floor and take the
-  // difference proportionally from the rest; the centre total and the list below
-  // keep the real amounts, so nothing the user reads as a number is distorted.
-  const MIN_SHARE = 0.02
-  const total = slices.reduce((sum, item) => sum + item.amountKopecks, 0)
-  const plotted = (() => {
-    if (!total) return slices.map((item) => ({ ...item, plot: 1 }))
-    const floor = total * MIN_SHARE
-    const small = slices.filter((item) => item.amountKopecks < floor)
-    if (!small.length) return slices.map((item) => ({ ...item, plot: item.amountKopecks }))
-    const lifted = small.length * floor
-    const rest = total - small.reduce((sum, item) => sum + item.amountKopecks, 0)
-    const scale = rest > 0 ? Math.max(0, total - lifted) / rest : 0
-    return slices.map((item) => ({
-      ...item,
-      plot: item.amountKopecks < floor ? floor : item.amountKopecks * scale,
-    }))
-  })()
+  const plotted = groupSmallDonutSlices(slices)
 
   return <div className="analytics-donut">
     <ResponsiveContainer width="100%" height={380}>
       <PieChart>
-        <Pie data={plotted} dataKey="plot" startAngle={90} endAngle={-270} innerRadius="56%" outerRadius="96%" paddingAngle={1.4} cornerRadius={6} stroke={UI_COLORS.surface} strokeWidth={3} isAnimationActive={animate} animationDuration={440} animationEasing="ease-out">
+        <Pie data={plotted} dataKey="amountKopecks" nameKey="name" startAngle={90} endAngle={-270} innerRadius="56%" outerRadius="96%" paddingAngle={0} cornerRadius={6} stroke={UI_COLORS.surface} strokeWidth={3} isAnimationActive={animate} animationDuration={440} animationEasing="ease-out">
           {plotted.map((item) => <Cell key={item.key} fill={tint(item.color)} />)}
         </Pie>
-        <Pie data={plotted} dataKey="plot" startAngle={90} endAngle={-270} innerRadius="91%" outerRadius="96%" paddingAngle={1.4} cornerRadius={3} stroke="none" isAnimationActive={animate} animationDuration={440} animationEasing="ease-out">
+        <Pie data={plotted} dataKey="amountKopecks" nameKey="name" startAngle={90} endAngle={-270} innerRadius="91%" outerRadius="96%" paddingAngle={0} cornerRadius={3} stroke="none" isAnimationActive={animate} animationDuration={440} animationEasing="ease-out">
           {plotted.map((item) => <Cell key={item.key} fill={item.color} />)}
         </Pie>
       </PieChart>
@@ -138,43 +121,21 @@ function Sankey({ incomeSlices, expenseSlices, incomeKopecks, expenseKopecks }: 
   const leftX = 26
   const midX = W / 2 - barW / 2
   const rightX = W - 26 - barW
-  const gap = 3
+  const { sourceBands, targetBands, flowHeight } = buildSankeyLayout(incomeSlices, expenseSlices, incomeKopecks, expenseKopecks, H)
 
-  const incomes = incomeSlices.filter((item) => item.amountKopecks > 0)
-  const total = Math.max(1, incomeKopecks)
-  const surplus = Math.max(0, incomeKopecks - expenseKopecks)
-
-  // Everything is scaled against total income, so band heights add up to the bar.
-  const scale = (kopecks: number) => (kopecks / total) * (H - gap * 4)
-  /** Lays a list out top to bottom, returning each item with its y and height. */
-  const stack = <T,>(items: T[], amountOf: (item: T) => number) =>
-    items.reduce<{ bands: { item: T; y: number; height: number }[]; next: number }>((state, item) => {
-      const height = scale(amountOf(item))
-      state.bands.push({ item, y: state.next, height })
-      return { bands: state.bands, next: state.next + height + gap }
-    }, { bands: [], next: 0 })
-
-  const sources = stack(incomes, (item) => item.amountKopecks)
-  const sourceHeight = Math.max(1, sources.next - gap)
-
-  const outgoing = [
-    ...expenseSlices.filter((item) => item.amountKopecks > 0).map((item) => ({ name: item.name, color: item.color, amount: item.amountKopecks })),
-    ...(surplus > 0 ? [{ name: 'Профицит', color: UI_COLORS.chartSurplus, amount: surplus }] : []),
-  ]
-  const targets = stack(outgoing, (item) => item.amount)
+  if (!sourceBands.length && !targetBands.length) return null
 
   const band = (x1: number, y1: number, x2: number, y2: number, height: number) => {
     const cx = (x1 + x2) / 2
     return `M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2} L ${x2} ${y2 + height} C ${cx} ${y2 + height} ${cx} ${y1 + height} ${x1} ${y1 + height} Z`
   }
 
-  if (!sources.bands.length && !targets.bands.length) return null
-
   return <svg className="analytics-sankey" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Потоки доходов и расходов">
-    {sources.bands.map((source) => <path key={source.item.key} d={band(leftX + barW, source.y, midX, source.y, source.height)} fill={tint(source.item.color)} opacity=".85" />)}
-    {targets.bands.map((target) => <path key={target.item.name} d={band(midX + barW, target.y, rightX, target.y, target.height)} fill={tint(target.item.color)} opacity=".85" />)}
-    {sources.bands.map((source) => <rect key={source.item.key} x={leftX} y={source.y} width={barW} height={source.height} rx={3} fill={source.item.color} />)}
-    <rect x={midX} y={0} width={barW} height={sourceHeight} rx={3} fill={UI_COLORS.chartFlow} />
-    {targets.bands.map((target) => <rect key={target.item.name} x={rightX} y={target.y} width={barW} height={target.height} rx={3} fill={target.item.color} />)}
+    {sourceBands.map((source) => <path key={source.item.key} d={band(leftX + barW, source.y, midX, source.y, source.height)} fill={tint(source.item.color)} opacity=".85"><title>{`${source.item.name}: ${money(source.item.amount)}`}</title></path>)}
+    {targetBands.map((target) => <path key={target.item.key} d={band(midX + barW, target.y, rightX, target.y, target.height)} fill={tint(target.item.color)} opacity=".85"><title>{`${target.item.name}: ${money(target.item.amount)}`}</title></path>)}
+    {sourceBands.map((source) => <rect key={source.item.key} x={leftX} y={source.y} width={barW} height={source.height} rx={3} fill={source.item.color}><title>{`${source.item.name}: ${money(source.item.amount)}`}</title></rect>)}
+    <rect x={midX} y={0} width={barW} height={flowHeight} rx={3} fill={UI_COLORS.chartFlow} />
+    {targetBands.map((target) => <rect key={target.item.key} x={rightX} y={target.y} width={barW} height={target.height} rx={3} fill={target.item.color}><title>{`${target.item.name}: ${money(target.item.amount)}`}</title></rect>)}
+    {sourceBands.filter((source) => source.item.key === 'deficit').map((source) => <text key={`${source.item.key}-label`} x={leftX + barW + 5} y={Math.min(H - 5, source.y + Math.max(13, source.height / 2))} fill={UI_COLORS.chartMuted} fontSize="11">Из остатка / дефицит</text>)}
   </svg>
 }
