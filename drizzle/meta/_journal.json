@@ -92,6 +92,13 @@
       "when": 1788610000000,
       "tag": "0012_category_hints",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788620000000,
+      "tag": "0013_update_receipts",
+      "breakpoints": true
     }
   ]
 }

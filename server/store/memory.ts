@@ -29,9 +29,11 @@ import type {
   CategoryUpdate,
   FinanceStore,
   QuickEntryInput,
+  QuickEntryResult,
   ReminderSettingsInput,
   SharedActivity,
   StoreReadiness,
+  TelegramUpdateClaim,
   SessionUser,
   TransactionInput,
   TransactionUpdate,
@@ -63,7 +65,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private users = new Map<string, InternalUser>()
   private usersByTelegram = new Map<number, string>()
   private sessions = new Map<string, { userId: string; expiresAt: Date }>()
-  private processedUpdates = new Set<number>()
+  private processedUpdates = new Map<number, { delivered: boolean; transactionId: string | null }>()
   private reminders = new Map<string, { enabled: boolean; localTime: string; daysOfWeek: number[] }>()
   private reminderDeliveries = new Set<string>()
   private categoryHints = new Map<string, Map<string, string>>()
@@ -118,13 +120,36 @@ export class MemoryFinanceStore implements FinanceStore {
     return { known: true }
   }
 
-  async claimTelegramUpdate(updateId: number) {
-    if (this.processedUpdates.has(updateId)) return false
-    this.processedUpdates.add(updateId)
-    return true
+  async claimTelegramUpdate(updateId: number): Promise<TelegramUpdateClaim> {
+    const seen = this.processedUpdates.get(updateId)
+    if (!seen) {
+      this.processedUpdates.set(updateId, { delivered: false, transactionId: null })
+      return { fresh: true, delivered: false, entry: null }
+    }
+    const entry = seen.transactionId ? this.quickEntryResult(seen.transactionId) : null
+    return { fresh: false, delivered: seen.delivered, entry }
   }
 
-  async releaseTelegramUpdate(updateId: number) { this.processedUpdates.delete(updateId) }
+  async markTelegramUpdateDelivered(updateId: number) {
+    const seen = this.processedUpdates.get(updateId)
+    if (seen) seen.delivered = true
+  }
+
+  /** Rebuilds the confirmation for an expense a previous attempt recorded. */
+  private quickEntryResult(transactionId: string): QuickEntryResult | null {
+    for (const [workspaceId, entries] of this.transactions) {
+      const found = entries.find((item) => item.id === transactionId)
+      if (!found) continue
+      const category = (this.categories.get(workspaceId) || []).find((item) => item.id === found.categoryId)
+      return {
+        id: found.id,
+        categoryName: category?.name ?? null,
+        categoryGuessed: Boolean(found.categoryGuessed),
+        amountKopecks: found.amountKopecks,
+      }
+    }
+    return null
+  }
 
   async revokeSession(token: string) { this.sessions.delete(hashToken(token)) }
 
@@ -220,10 +245,13 @@ export class MemoryFinanceStore implements FinanceStore {
     return this.recordQuickEntry(userId, input, 'shortcut')
   }
 
-  async createBotEntry(telegramUserId: number, input: QuickEntryInput) {
+  async createBotEntry(telegramUserId: number, input: QuickEntryInput, updateId: number | null) {
     const userId = this.usersByTelegram.get(telegramUserId)
     if (!userId) throw new AppError(404, 'BOT_USER_UNKNOWN', 'Сначала откройте приложение')
-    return this.recordQuickEntry(userId, input, 'bot')
+    const result = await this.recordQuickEntry(userId, input, 'bot')
+    const seen = updateId === null ? undefined : this.processedUpdates.get(updateId)
+    if (seen) seen.transactionId = result.id
+    return result
   }
 
   private botEntry(telegramUserId: number, transactionId: string) {

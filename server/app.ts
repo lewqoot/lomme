@@ -31,7 +31,7 @@ import { parseQuickAmount, splitQuickInput } from '../src/shared/quick-entry.js'
 import { telegramStartParam, validateTelegramInitData, type TelegramIdentity } from './auth/telegram.js'
 import { answerCallbackQuery, editMessage, sendMessage } from './telegram/api.js'
 import { accountInviteAccepted } from './telegram/texts.js'
-import { routeUpdate, type TelegramUpdate } from './telegram/router.js'
+import { confirmation as confirmationFor, routeUpdate, type TelegramUpdate } from './telegram/router.js'
 import { AppError } from './lib/errors.js'
 import { ensureSameOrigin } from './lib/security.js'
 import type { FinanceStore, SessionUser } from './store/types.js'
@@ -474,12 +474,32 @@ export async function buildApp(store: FinanceStore) {
     const update = request.body as TelegramUpdate
     request.log.info({ event: 'telegram_update_received', updateId: update.update_id })
 
-    // Telegram redelivers an update whenever the webhook is slow to answer, so
-    // the same /start would otherwise be greeted twice.
+    // Telegram redelivers whenever the webhook is slow to answer. A redelivery
+    // must never write money twice, but it must still get an answer: if the
+    // first attempt recorded an expense and then failed to confirm it, the
+    // confirmation is rebuilt from that expense and sent again.
     const updateId = Number.isSafeInteger(update.update_id) ? update.update_id! : null
-    if (updateId !== null && !(await store.claimTelegramUpdate(updateId))) {
-      request.log.info({ event: 'telegram_update_duplicate', updateId }, 'Telegram update already handled')
-      return reply.send({ ok: true })
+    if (updateId !== null) {
+      const claim = await store.claimTelegramUpdate(updateId)
+      if (!claim.fresh) {
+        if (claim.delivered) {
+          request.log.info({ event: 'telegram_update_duplicate', updateId }, 'Telegram update already handled')
+          return reply.send({ ok: true })
+        }
+        // Seen, undelivered, and no expense came of it — a greeting or a help
+        // reply whose send failed. Running it again costs nothing, and the
+        // person still gets an answer.
+        if (!claim.entry) request.log.info({ event: 'telegram_update_retry', updateId }, 'Retrying an update that recorded no money')
+      }
+      if (!claim.fresh && claim.entry) {
+        request.log.info({ event: 'telegram_update_reconfirm', updateId }, 'Re-sending confirmation for a recorded expense')
+        const chatId = update.message?.chat?.id
+        if (!Number.isSafeInteger(chatId)) return reply.send({ ok: true })
+        const repeat = await sendMessage(chatId!, confirmationFor(claim.entry))
+        if (repeat.ok) await store.markTelegramUpdateDelivered(updateId)
+        else if (!repeat.permanent) return reply.code(502).send({ ok: false })
+        return reply.send({ ok: true })
+      }
     }
 
     // The username is needed for the deep-linked buttons; without it they are
@@ -490,7 +510,7 @@ export async function buildApp(store: FinanceStore) {
       noteBotContact: (telegramUserId) => store.noteBotContact(telegramUserId),
       recordEntry: async (telegramUserId, amount, text) => {
         try {
-          const entry = await store.createBotEntry(telegramUserId, parse(quickEntrySchema, { amount, text }))
+          const entry = await store.createBotEntry(telegramUserId, parse(quickEntrySchema, { amount, text }), updateId)
           return { status: 'recorded', entry }
         } catch (error) {
           // Someone who has never opened the Mini App has no wallet to record
@@ -529,13 +549,11 @@ export async function buildApp(store: FinanceStore) {
     const outcome = edited?.ok ? edited : await sendMessage(action.chatId, action.message)
     if (!outcome.ok) {
       request.log.error({ event: 'telegram_reply_failed', updateId, permanent: outcome.permanent, description: outcome.description }, 'Telegram reply failed')
-      // A retryable failure has to leave the update claimable again, otherwise
-      // Telegram's next attempt is dropped as a duplicate and the reply is lost.
-      if (!outcome.permanent) {
-        if (updateId !== null) await store.releaseTelegramUpdate(updateId)
-        return reply.code(502).send({ ok: false })
-      }
+      // The claim is kept either way. Telegram's retry will find the recorded
+      // expense and re-send the confirmation instead of writing a second one.
+      if (!outcome.permanent) return reply.code(502).send({ ok: false })
     }
+    if (updateId !== null && outcome.ok) await store.markTelegramUpdateDelivered(updateId)
     return reply.send({ ok: true })
   }
 

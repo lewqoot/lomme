@@ -77,6 +77,18 @@ export type StoreReadiness = {
   detail?: string
 }
 
+/**
+ * What is known about an update that has been seen before. `fresh` means this
+ * process may go ahead and act on it; otherwise `entry` says which expense a
+ * previous attempt already recorded, so the answer can be repeated without
+ * repeating the money.
+ */
+export type TelegramUpdateClaim = {
+  fresh: boolean
+  delivered: boolean
+  entry: QuickEntryResult | null
+}
+
 export type SessionUser = {
   id: string
   firstName: string
@@ -94,16 +106,13 @@ export interface FinanceStore {
    */
   noteBotContact(telegramUserId: number): Promise<{ known: boolean }>
   /**
-   * False when this update was already handled. Telegram redelivers an update
-   * whenever the webhook is slow to answer, and a replayed /start would send a
-   * second greeting.
+   * Claims an update for processing, or reports what a previous attempt at the
+   * same update already did. Telegram redelivers whenever the webhook is slow
+   * to answer, and the money must not be written twice.
    */
-  claimTelegramUpdate(updateId: number): Promise<boolean>
-  /**
-   * Gives a claimed update back after a delivery failure worth retrying, so
-   * Telegram's redelivery is not silently swallowed as a duplicate.
-   */
-  releaseTelegramUpdate(updateId: number): Promise<void>
+  claimTelegramUpdate(updateId: number): Promise<TelegramUpdateClaim>
+  /** Marks the confirmation for an update as delivered. */
+  markTelegramUpdateDelivered(updateId: number): Promise<void>
   revokeSession(token: string): Promise<void>
   snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, accountId?: string | null): Promise<AppSnapshot>
   transactionsPage(userId: string, workspaceId: string, range: SnapshotRange, cursor?: string, limit?: number, accountId?: string | null): Promise<TransactionPage>
@@ -114,8 +123,12 @@ export interface FinanceStore {
   hasQuickKey(userId: string): Promise<boolean>
   /** Records one line from the shortcut, working the category out from its text. */
   createQuickEntry(key: string, input: QuickEntryInput): Promise<QuickEntryResult>
-  /** The same, for a line typed straight into the bot chat. */
-  createBotEntry(telegramUserId: number, input: QuickEntryInput): Promise<QuickEntryResult>
+  /**
+   * The same, for a line typed straight into the bot chat. The update id is
+   * recorded alongside the expense in one transaction, so a redelivery can be
+   * recognised as already paid for.
+   */
+  createBotEntry(telegramUserId: number, input: QuickEntryInput, updateId: number | null): Promise<QuickEntryResult>
   /** Expense categories the bot may offer for a transaction it just recorded. */
   botCategoryChoices(telegramUserId: number, transactionId: string): Promise<BotCategoryChoices | null>
   /**

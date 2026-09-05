@@ -76,7 +76,12 @@ const START_WITH_INVITE = /^\/start(?:@[A-Za-z0-9_]+)?\s+invite_([A-Za-z0-9_-]{2
 const BARE_COMMAND = /^\/([a-z_]{1,32})(?:@[A-Za-z0-9_]+)?$/
 const HAS_DIGIT = /\d/
 
-function confirmation(entry: RecordedEntry): BotMessage {
+/**
+ * The reply for a recorded expense. Exported because a redelivered update has
+ * to repeat exactly this message, rebuilt from the expense the first attempt
+ * already wrote.
+ */
+export function confirmation(entry: RecordedEntry): BotMessage {
   if (!entry.categoryName) return texts.recordedWithoutCategory(entry.amountKopecks, entry.id)
   return entry.categoryGuessed
     ? texts.recordedGuess(entry.amountKopecks, entry.categoryName, entry.id)

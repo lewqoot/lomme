@@ -283,5 +283,9 @@ export const auditLog = pgTable('audit_log', {
 
 export const processedTelegramUpdates = pgTable('processed_telegram_updates', {
   updateId: bigint('update_id', { mode: 'number' }).primaryKey(),
+  /** The expense this update produced, if it produced one. */
+  transactionId: uuid('transaction_id').references(() => transactions.id, { onDelete: 'set null' }),
+  /** When the confirmation actually reached Telegram. */
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   processedAt: timestamp('processed_at', { withTimezone: true }).defaultNow().notNull(),
 })

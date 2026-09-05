@@ -27,6 +27,7 @@ import { hashToken, randomToken } from '../lib/security.js'
 import type {
   AccountInput,
   StoreReadiness,
+  TelegramUpdateClaim,
   ReminderSettingsInput,
   SharedActivity,
   AccountUpdate,
@@ -113,16 +114,40 @@ export class PostgresFinanceStore implements FinanceStore {
     return { known: Boolean(result.rowCount) }
   }
 
-  async claimTelegramUpdate(updateId: number) {
-    const result = await this.pool.query(
+  async claimTelegramUpdate(updateId: number): Promise<TelegramUpdateClaim> {
+    const claimed = await this.pool.query(
       `INSERT INTO processed_telegram_updates (update_id) VALUES ($1) ON CONFLICT (update_id) DO NOTHING`,
       [updateId],
     )
-    return result.rowCount === 1
+    if (claimed.rowCount === 1) return { fresh: true, delivered: false, entry: null }
+
+    // Seen before. Whether it produced an expense decides what happens now:
+    // the confirmation can be re-sent, but the expense must not be re-made.
+    const seen = await this.pool.query(
+      `SELECT p.delivered_at, t.id, t.amount_kopecks, t.category_guessed, c.name AS category_name
+         FROM processed_telegram_updates p
+         LEFT JOIN transactions t ON t.id=p.transaction_id AND t.deleted_at IS NULL
+         LEFT JOIN categories c ON c.id=t.category_id
+        WHERE p.update_id=$1`, [updateId])
+    const row = seen.rows[0]
+    return {
+      fresh: false,
+      delivered: Boolean(row?.delivered_at),
+      entry: row?.id
+        ? {
+          id: row.id as string,
+          categoryName: (row.category_name as string | null) ?? null,
+          categoryGuessed: Boolean(row.category_guessed),
+          amountKopecks: Number(row.amount_kopecks),
+        }
+        : null,
+    }
   }
 
-  async releaseTelegramUpdate(updateId: number) {
-    await this.pool.query(`DELETE FROM processed_telegram_updates WHERE update_id=$1`, [updateId])
+  async markTelegramUpdateDelivered(updateId: number) {
+    await this.pool.query(
+      `UPDATE processed_telegram_updates SET delivered_at=now() WHERE update_id=$1 AND delivered_at IS NULL`,
+      [updateId])
   }
 
   async userForSession(token: string) {
@@ -263,11 +288,11 @@ export class PostgresFinanceStore implements FinanceStore {
     return this.recordQuickEntry(user.id as string, user.active_account_id as string | null, input, 'shortcut')
   }
 
-  async createBotEntry(telegramUserId: number, input: QuickEntryInput) {
+  async createBotEntry(telegramUserId: number, input: QuickEntryInput, updateId: number | null) {
     const owner = await this.pool.query('SELECT id, active_account_id FROM users WHERE telegram_user_id=$1 AND deleted_at IS NULL', [telegramUserId])
     const user = owner.rows[0]
     if (!user) throw new AppError(404, 'BOT_USER_UNKNOWN', 'Сначала откройте приложение')
-    return this.recordQuickEntry(user.id as string, user.active_account_id as string | null, input, 'bot')
+    return this.recordQuickEntry(user.id as string, user.active_account_id as string | null, input, 'bot', updateId)
   }
 
   /**
@@ -344,7 +369,7 @@ export class PostgresFinanceStore implements FinanceStore {
    * Only the source column differs, so an improvement to category matching
    * reaches the shortcut and the bot at the same moment.
    */
-  private async recordQuickEntry(userId: string, activeAccountId: string | null, input: QuickEntryInput, source: 'shortcut' | 'bot') {
+  private async recordQuickEntry(userId: string, activeAccountId: string | null, input: QuickEntryInput, source: 'shortcut' | 'bot', updateId: number | null = null) {
     const user = { id: userId, active_account_id: activeAccountId }
     const amountKopecks = parseQuickAmount(input.amount)
     if (!amountKopecks) throw new AppError(400, 'QUICK_AMOUNT_INVALID', 'Не разобрали сумму')
@@ -373,12 +398,26 @@ export class PostgresFinanceStore implements FinanceStore {
     const hints = new Map(hintResult.rows.map((row) => [row.keyword as string, row.category_id as string]))
     const entry = resolveQuickEntry(input.text, amountKopecks, categories, history, hints)
 
-    const inserted = await this.pool.query(
-      `INSERT INTO transactions (workspace_id,type,amount_kopecks,account_id,category_id,occurred_at,note,source,category_guessed,created_by_user_id)
-       VALUES ($1,'expense',$2,$3,$4,now(),$5,$8,$6,$7) RETURNING id`,
-      [workspaceId, entry.amountKopecks, accountId, entry.categoryId, entry.note, entry.categoryGuessed, user.id, source])
+    // The expense and the note of which update caused it are written together.
+    // Split across two statements, a crash in between would leave a retry
+    // unable to tell that the money had already been recorded.
+    const client = await this.pool.connect()
+    let insertedId: string
+    try {
+      await client.query('BEGIN')
+      const inserted = await client.query(
+        `INSERT INTO transactions (workspace_id,type,amount_kopecks,account_id,category_id,occurred_at,note,source,category_guessed,created_by_user_id)
+         VALUES ($1,'expense',$2,$3,$4,now(),$5,$8,$6,$7) RETURNING id`,
+        [workspaceId, entry.amountKopecks, accountId, entry.categoryId, entry.note, entry.categoryGuessed, user.id, source])
+      insertedId = inserted.rows[0].id as string
+      if (updateId !== null) {
+        await client.query(
+          `UPDATE processed_telegram_updates SET transaction_id=$2 WHERE update_id=$1`, [updateId, insertedId])
+      }
+      await client.query('COMMIT')
+    } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
     return {
-      id: inserted.rows[0].id as string,
+      id: insertedId,
       categoryName: categories.find((item) => item.id === entry.categoryId)?.name ?? null,
       categoryGuessed: entry.categoryGuessed,
       amountKopecks: entry.amountKopecks,
