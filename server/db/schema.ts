@@ -173,6 +173,7 @@ export const transactions = pgTable('transactions', {
 }, (table) => [
   index('transactions_workspace_date_idx').on(table.workspaceId, table.occurredAt),
   index('transactions_account_idx').on(table.accountId),
+  index('transactions_target_account_idx').on(table.targetAccountId),
 ])
 
 /** A word this workspace has explicitly assigned to a category. */

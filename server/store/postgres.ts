@@ -171,22 +171,27 @@ export class PostgresFinanceStore implements FinanceStore {
   async snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, requestedAccountId?: string | null): Promise<AppSnapshot> {
     const userResult = await this.pool.query(`SELECT id,first_name,username,timezone,active_workspace_id,active_account_id FROM users WHERE id=$1 AND deleted_at IS NULL`, [userId])
     if (!userResult.rowCount) throw forbidden()
-    const accessibleResult = await this.pool.query(`WITH deltas AS (
-      SELECT account_id,SUM(CASE WHEN type='income' THEN amount_kopecks ELSE -amount_kopecks END) AS amount
-      FROM transactions WHERE deleted_at IS NULL GROUP BY account_id
+    const accessibleResult = await this.pool.query(`WITH accessible_accounts AS MATERIALIZED (
+      SELECT a.*,am.role AS access_role
+      FROM account_members am JOIN accounts a ON a.id=am.account_id JOIN workspaces w ON w.id=a.workspace_id
+      WHERE am.user_id=$1 AND a.archived_at IS NULL AND w.deleted_at IS NULL
+    ), deltas AS (
+      SELECT t.account_id,SUM(CASE WHEN t.type='income' THEN t.amount_kopecks ELSE -t.amount_kopecks END) AS amount
+      FROM accessible_accounts access JOIN transactions t ON t.account_id=access.id
+      WHERE t.deleted_at IS NULL GROUP BY t.account_id
       UNION ALL
-      SELECT target_account_id AS account_id,SUM(amount_kopecks) AS amount
-      FROM transactions WHERE deleted_at IS NULL AND type='transfer' AND target_account_id IS NOT NULL GROUP BY target_account_id
+      SELECT t.target_account_id AS account_id,SUM(t.amount_kopecks) AS amount
+      FROM accessible_accounts access JOIN transactions t ON t.target_account_id=access.id
+      WHERE t.deleted_at IS NULL AND t.type='transfer' GROUP BY t.target_account_id
     ), totals AS (SELECT account_id,SUM(amount) AS amount FROM deltas GROUP BY account_id), member_counts AS (
-      SELECT account_id,COUNT(*)::int AS member_count FROM account_members GROUP BY account_id
+      SELECT am.account_id,COUNT(*)::int AS member_count
+      FROM accessible_accounts access JOIN account_members am ON am.account_id=access.id GROUP BY am.account_id
     )
-    SELECT a.*,am.role AS access_role,COALESCE(mc.member_count,1) AS member_count,
+    SELECT a.*,COALESCE(mc.member_count,1) AS member_count,
       a.opening_balance_kopecks+COALESCE(totals.amount,0) AS balance_kopecks
-    FROM account_members am JOIN accounts a ON a.id=am.account_id
+    FROM accessible_accounts a
     LEFT JOIN totals ON totals.account_id=a.id LEFT JOIN member_counts mc ON mc.account_id=a.id
-    JOIN workspaces w ON w.id=a.workspace_id
-    WHERE am.user_id=$1 AND a.archived_at IS NULL AND w.deleted_at IS NULL
-    ORDER BY CASE am.role WHEN 'owner' THEN 0 ELSE 1 END,a.created_at`, [userId])
+    ORDER BY CASE a.access_role WHEN 'owner' THEN 0 ELSE 1 END,a.created_at`, [userId])
     const accounts: AccountView[] = accessibleResult.rows.map((row) => ({ ...accountRow(row), balanceKopecks: Number(row.balance_kopecks) }))
     const workspaceResult = await this.pool.query(`SELECT w.id,w.name,w.kind,
       CASE WHEN bool_or(am.role='owner') THEN 'owner' ELSE 'member' END AS role
