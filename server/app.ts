@@ -28,7 +28,7 @@ import {
 } from '../src/shared/contracts.js'
 import { parseQuickAmount, splitQuickInput } from '../src/shared/quick-entry.js'
 import { telegramStartParam, validateTelegramInitData, type TelegramIdentity } from './auth/telegram.js'
-import { answerCallbackQuery, sendMessage } from './telegram/api.js'
+import { answerCallbackQuery, editMessage, sendMessage } from './telegram/api.js'
 import { accountInviteAccepted } from './telegram/texts.js'
 import { routeUpdate, type TelegramUpdate } from './telegram/router.js'
 import { AppError } from './lib/errors.js'
@@ -438,6 +438,9 @@ export async function buildApp(store: FinanceStore) {
           return { status: 'failed' }
         }
       },
+      categoryChoices: (telegramUserId, transactionId) => store.botCategoryChoices(telegramUserId, transactionId),
+      correctCategory: (telegramUserId, transactionId, prefix) => store.correctBotEntry(telegramUserId, transactionId, prefix),
+      deleteEntry: (telegramUserId, transactionId) => store.deleteBotEntry(telegramUserId, transactionId),
       resolveInvite: async (token) => {
         try {
           const preview = await store.previewAccountInvite('', token)
@@ -454,7 +457,11 @@ export async function buildApp(store: FinanceStore) {
     if (action.kind === 'none') return reply.send({ ok: true })
     if (action.kind === 'answer') await answerCallbackQuery(action.callbackQueryId)
 
-    const outcome = await sendMessage(action.chatId, action.message)
+    // Replacing the message a button sat on keeps a correction from adding a
+    // second bubble to the chat every time.
+    const outcome = action.kind === 'answer' && action.replaceMessageId !== undefined
+      ? await editMessage(action.chatId, action.replaceMessageId, action.message)
+      : await sendMessage(action.chatId, action.message)
     if (!outcome.ok) {
       request.log.error({ event: 'telegram_reply_failed', updateId, permanent: outcome.permanent, description: outcome.description }, 'Telegram reply failed')
       // A retryable failure has to leave the update claimable again, otherwise

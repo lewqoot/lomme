@@ -4,13 +4,18 @@ import { MemoryFinanceStore } from '../server/store/memory.js'
 import { routeUpdate, type RouterContext } from '../server/telegram/router.js'
 
 const APP_URL = 'https://lomme.example'
+/** Любой валидный uuid: роутер проверяет форму callback_data. */
+const TX = '11111111-2222-3333-4444-555555555555'
 
 function context(overrides: Partial<RouterContext> = {}): RouterContext {
   return {
     links: { appUrl: APP_URL, botUsername: 'lomme_test_bot' },
     noteBotContact: async () => ({ known: false }),
     resolveInvite: async () => null,
-    recordEntry: async () => ({ status: 'recorded', entry: { categoryName: 'Продукты', categoryGuessed: false, amountKopecks: 320_000 } }),
+    categoryChoices: async () => null,
+    correctCategory: async () => null,
+    deleteEntry: async () => null,
+    recordEntry: async () => ({ status: 'recorded', entry: { id: TX, categoryName: 'Продукты', categoryGuessed: false, amountKopecks: 320_000 } }),
     ...overrides,
   }
 }
@@ -102,7 +107,7 @@ describe('bot router', () => {
     const action = await routeUpdate(privateMessage('3200 продукты', 777), context({
       recordEntry: async (id, amount, text) => {
         seen.push([id, amount, text])
-        return { status: 'recorded', entry: { categoryName: 'Продукты', categoryGuessed: false, amountKopecks: 320_000 } }
+        return { status: 'recorded', entry: { id: TX, categoryName: 'Продукты', categoryGuessed: false, amountKopecks: 320_000 } }
       },
     }))
 
@@ -113,7 +118,7 @@ describe('bot router', () => {
 
   it('честно помечает угаданную категорию', async () => {
     const action = await routeUpdate(privateMessage('пятёрочка 2340'), context({
-      recordEntry: async () => ({ status: 'recorded', entry: { categoryName: 'Продукты', categoryGuessed: true, amountKopecks: 234_000 } }),
+      recordEntry: async () => ({ status: 'recorded', entry: { id: TX, categoryName: 'Продукты', categoryGuessed: true, amountKopecks: 234_000 } }),
     }))
 
     if (action.kind !== 'send') throw new Error('ожидали отправку')
@@ -122,7 +127,7 @@ describe('bot router', () => {
 
   it('записывает без категории, когда подобрать не вышло', async () => {
     const action = await routeUpdate(privateMessage('1900 подарок жене'), context({
-      recordEntry: async () => ({ status: 'recorded', entry: { categoryName: null, categoryGuessed: false, amountKopecks: 190_000 } }),
+      recordEntry: async () => ({ status: 'recorded', entry: { id: TX, categoryName: null, categoryGuessed: false, amountKopecks: 190_000 } }),
     }))
 
     if (action.kind !== 'send') throw new Error('ожидали отправку')

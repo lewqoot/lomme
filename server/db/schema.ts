@@ -175,6 +175,14 @@ export const transactions = pgTable('transactions', {
   index('transactions_account_idx').on(table.accountId),
 ])
 
+/** A word this workspace has explicitly assigned to a category. */
+export const categoryHints = pgTable('category_hints', {
+  workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
+  keyword: text('keyword').notNull(),
+  categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'cascade' }).notNull(),
+  ...timestamps,
+}, (table) => [primaryKey({ columns: [table.workspaceId, table.keyword] })])
+
 export const budgets = pgTable('budgets', {
   id: uuid('id').defaultRandom().primaryKey(),
   workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),

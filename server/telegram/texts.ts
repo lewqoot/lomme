@@ -83,7 +83,7 @@ export function help(links: LinkContext): BotMessage {
       'кафе 890',
       '430 аптека',
       '',
-      'Порядок не важен. Понимаю названия магазинов и сокращения, категорию подберу сам. Ошибусь — поправишь в приложении.',
+      'Порядок не важен. Понимаю названия магазинов и сокращения, категорию подберу сам. Ошибусь — нажми «Другая категория» под ответом, и я запомню это слово на будущее.',
       '',
       'Хочешь ещё быстрее? Шорткат ставит запись трат на экран блокировки — тогда Telegram открывать не надо совсем.',
       '',
@@ -93,21 +93,78 @@ export function help(links: LinkContext): BotMessage {
   }
 }
 
+/**
+ * Buttons under a fresh entry. Telegram allows 64 bytes of callback data, so
+ * the transaction id travels whole (36 characters) and nothing else has to.
+ */
+function entryButtons(transactionId: string, offerCategory: boolean): InlineKeyboard {
+  const row: InlineKeyboard[number] = []
+  if (offerCategory) row.push({ text: 'Другая категория', callback_data: `cat:${transactionId}` })
+  row.push({ text: 'Удалить', callback_data: `del:${transactionId}` })
+  return [row]
+}
+
 /** The category was chosen outright: the name is a statement, not a question. */
-export function recorded(amountKopecks: number, categoryName: string): BotMessage {
-  return { text: `✅ Записано ${money(amountKopecks)}\n${categoryName}` }
+export function recorded(amountKopecks: number, categoryName: string, transactionId: string): BotMessage {
+  return {
+    text: `✅ Записано ${money(amountKopecks)}\n${categoryName}`,
+    keyboard: entryButtons(transactionId, true),
+  }
 }
 
 /**
  * The category was worked out from the text. Saying so once is cheaper than a
  * month of analytics quietly built on a wrong guess.
  */
-export function recordedGuess(amountKopecks: number, categoryName: string): BotMessage {
-  return { text: `✅ Записано ${money(amountKopecks)}\n${categoryName} — если не туда, поправь в приложении` }
+export function recordedGuess(amountKopecks: number, categoryName: string, transactionId: string): BotMessage {
+  return {
+    text: `✅ Записано ${money(amountKopecks)}\n${categoryName} — если не туда, поправь`,
+    keyboard: entryButtons(transactionId, true),
+  }
 }
 
-export function recordedWithoutCategory(amountKopecks: number): BotMessage {
-  return { text: `✅ Записано ${money(amountKopecks)}\nБез категории` }
+export function recordedWithoutCategory(amountKopecks: number, transactionId: string): BotMessage {
+  return {
+    text: `✅ Записано ${money(amountKopecks)}\nБез категории`,
+    keyboard: [[
+      { text: 'Выбрать категорию', callback_data: `cat:${transactionId}` },
+      { text: 'Удалить', callback_data: `del:${transactionId}` },
+    ]],
+  }
+}
+
+/**
+ * The category picker. Ids are shortened to eight characters to fit the
+ * callback budget alongside the transaction id; the store refuses a prefix
+ * that matches more than one category rather than guessing.
+ */
+export function chooseCategory(transactionId: string, categories: Array<{ id: string; name: string }>, currentCategoryId: string | null): BotMessage {
+  const rows: InlineKeyboard = []
+  const offered = categories.filter((item) => item.id !== currentCategoryId)
+  for (let index = 0; index < offered.length; index += 2) {
+    rows.push(offered.slice(index, index + 2).map((item) => ({
+      text: item.name,
+      callback_data: `set:${transactionId}:${item.id.slice(0, 8)}`,
+    })))
+  }
+  rows.push([{ text: '← Оставить как есть', callback_data: `keep:${transactionId}` }])
+  return { text: 'Куда записать?', keyboard: rows }
+}
+
+/** After a correction: says what changed, and what was learned from it. */
+export function categoryCorrected(amountKopecks: number, categoryName: string, keyword: string | null): BotMessage {
+  const lines = [`✅ ${money(amountKopecks)} → ${categoryName}`]
+  if (keyword) lines.push('', `Запомнил: «${keyword}» теперь идёт сюда.`)
+  return { text: lines.join('\n') }
+}
+
+export function entryDeleted(amountKopecks: number): BotMessage {
+  return { text: `🗑 Удалил запись на ${money(amountKopecks)}` }
+}
+
+/** The button outlived the entry it belonged to. */
+export function entryGone(): BotMessage {
+  return { text: 'Этой записи уже нет.' }
 }
 
 export function amountNotFound(): BotMessage {

@@ -60,6 +60,15 @@ export type SharedActivity = {
   byAuthor: Array<{ name: string; count: number; amountKopecks: number; isSelf: boolean }>
 }
 
+/** What the bot needs to draw a category keyboard. */
+export type BotCategoryChoices = {
+  transactionId: string
+  currentCategoryId: string | null
+  categories: Array<{ id: string; name: string }>
+}
+
+export type BotCorrection = { categoryName: string; amountKopecks: number; keyword: string | null }
+
 export type SessionUser = {
   id: string
   firstName: string
@@ -99,6 +108,15 @@ export interface FinanceStore {
   createQuickEntry(key: string, input: QuickEntryInput): Promise<QuickEntryResult>
   /** The same, for a line typed straight into the bot chat. */
   createBotEntry(telegramUserId: number, input: QuickEntryInput): Promise<QuickEntryResult>
+  /** Expense categories the bot may offer for a transaction it just recorded. */
+  botCategoryChoices(telegramUserId: number, transactionId: string): Promise<BotCategoryChoices | null>
+  /**
+   * Moves a bot-recorded entry to another category and remembers the choice as
+   * a rule, so the same word lands there next time without being asked.
+   */
+  correctBotEntry(telegramUserId: number, transactionId: string, categoryPrefix: string): Promise<BotCorrection | null>
+  /** Removes an entry the bot recorded, if it still belongs to this person. */
+  deleteBotEntry(telegramUserId: number, transactionId: string): Promise<{ amountKopecks: number } | null>
   updateTransaction(userId: string, transactionId: string, input: TransactionUpdate): Promise<void>
   deleteTransaction(userId: string, transactionId: string, version: number): Promise<void>
   createAccount(userId: string, input: AccountInput): Promise<{ id: string }>

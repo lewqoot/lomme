@@ -14,6 +14,10 @@
  * Only the leading emoji of a message is decorated. A heading earns the
  * animation; an emoji inside a sentence would just be noise, and the entity
  * offsets would have to be computed against the whole string.
+ *
+ * The ✅ that confirms a recorded expense is deliberately absent: those arrive
+ * many times a day and match the shortcut's own reply, which cannot animate
+ * anything. Matching the two matters more than decorating one of them.
  */
 
 /** Plain emoji → id of its animated twin in the set. */
@@ -31,7 +35,6 @@ const ANIMATED: Readonly<Record<string, string>> = {
   '⚠️': '5447644880824181073',
   '🗑': '5445267414562389170',
   '❌': '5210952531676504517',
-  '✔️': '5206607081334906820',
   '💡': '5422439311196834318',
 }
 

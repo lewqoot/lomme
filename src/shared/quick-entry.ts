@@ -77,6 +77,19 @@ function onlyMatch(named: Named[], predicate: (entry: Named) => boolean): Named 
   return found.length === 1 ? found[0]! : null
 }
 
+/** A word this workspace has explicitly assigned to a category. */
+export type CategoryHints = ReadonlyMap<string, string>
+
+/**
+ * Normalises a line into the word a hint is keyed by: the first meaningful
+ * word. Both writing a hint and looking one up go through this, so "Кофе"
+ * typed today finds the rule saved for "кофе с собой" yesterday.
+ */
+export function hintKeyword(text: string): string | null {
+  const first = normalise(text).split(' ')[0] ?? ''
+  return first.length >= 3 ? first : null
+}
+
 /**
  * What this person meant last time. Matched on the whole note first and then on
  * its first word, so a category corrected once for "кофе с собой" also answers
@@ -124,6 +137,7 @@ export function resolveQuickEntry(
   amountKopecks: number,
   categories: CategoryView[],
   history: ReadonlyArray<Pick<TransactionView, 'note' | 'categoryId' | 'type'>>,
+  hints: CategoryHints = new Map(),
 ): QuickEntry {
   const raw = text.trim()
   const whole = normalise(raw)
@@ -145,7 +159,14 @@ export function resolveQuickEntry(
   const exact = named.find((entry) => entry.name === whole)
   if (exact) return guessed(exact.item.id, raw)
 
-  const remembered = fromHistory(whole, head, history, new Set(usable.map((item) => item.id)))
+  // An explicit correction outranks everything below it, including a category
+  // name that happens to look similar: this person already said what they meant.
+  const known = new Set(usable.map((item) => item.id))
+  const keyword = hintKeyword(raw)
+  const hinted = keyword ? hints.get(keyword) : undefined
+  if (hinted && known.has(hinted)) return guessed(hinted, raw)
+
+  const remembered = fromHistory(whole, head, history, known)
   if (remembered) return guessed(remembered, raw)
 
   // A category name opening the line describes the rest of it: "Продукты на

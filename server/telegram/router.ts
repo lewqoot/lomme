@@ -31,6 +31,7 @@ export type TelegramUpdate = {
 
 /** What the store gives back once a line of text has been recorded. */
 export type RecordedEntry = {
+  id: string
   categoryName: string | null
   categoryGuessed: boolean
   amountKopecks: number
@@ -51,22 +52,68 @@ export type RouterContext = {
   resolveInvite(token: string): Promise<{ accountName: string; url: string } | null>
   /** Records one line of free text as an expense. */
   recordEntry(telegramUserId: number, amount: string, text: string): Promise<RecordOutcome>
+  /** Categories the bot may offer for an entry, or null if it is not theirs. */
+  categoryChoices(telegramUserId: number, transactionId: string): Promise<{
+    categories: Array<{ id: string; name: string }>
+    currentCategoryId: string | null
+  } | null>
+  /** Moves the entry and remembers the choice; null if the entry is gone. */
+  correctCategory(telegramUserId: number, transactionId: string, categoryPrefix: string): Promise<{
+    categoryName: string
+    amountKopecks: number
+    keyword: string | null
+  } | null>
+  /** Removes the entry; null if it is already gone. */
+  deleteEntry(telegramUserId: number, transactionId: string): Promise<{ amountKopecks: number } | null>
 }
 
 export type RouterAction =
   | { kind: 'none' }
   | { kind: 'send'; chatId: number; message: BotMessage }
-  | { kind: 'answer'; callbackQueryId: string; chatId: number; message: BotMessage }
+  | { kind: 'answer'; callbackQueryId: string; chatId: number; message: BotMessage; replaceMessageId?: number }
 
 const START_WITH_INVITE = /^\/start(?:@[A-Za-z0-9_]+)?\s+invite_([A-Za-z0-9_-]{20,120})$/
 const BARE_COMMAND = /^\/([a-z_]{1,32})(?:@[A-Za-z0-9_]+)?$/
 const HAS_DIGIT = /\d/
 
 function confirmation(entry: RecordedEntry): BotMessage {
-  if (!entry.categoryName) return texts.recordedWithoutCategory(entry.amountKopecks)
+  if (!entry.categoryName) return texts.recordedWithoutCategory(entry.amountKopecks, entry.id)
   return entry.categoryGuessed
-    ? texts.recordedGuess(entry.amountKopecks, entry.categoryName)
-    : texts.recorded(entry.amountKopecks, entry.categoryName)
+    ? texts.recordedGuess(entry.amountKopecks, entry.categoryName, entry.id)
+    : texts.recorded(entry.amountKopecks, entry.categoryName, entry.id)
+}
+
+const CALLBACK = /^(cat|set|del|keep):([0-9a-f-]{36})(?::([0-9a-f]{8}))?$/
+
+/**
+ * A button press. Every branch identifies the person from the callback's own
+ * sender, so a forwarded or replayed button cannot act on somebody else's
+ * entry — the store checks ownership again on its side.
+ */
+async function handleButton(data: string, telegramUserId: number | null, context: RouterContext): Promise<BotMessage> {
+  const parsed = CALLBACK.exec(data)
+  if (!parsed || telegramUserId === null) return texts.fallback(context.links)
+  const [, action, transactionId, categoryPrefix] = parsed
+
+  if (action === 'keep') return texts.entryGone()
+
+  if (action === 'cat') {
+    const choices = await context.categoryChoices(telegramUserId, transactionId!)
+    return choices
+      ? texts.chooseCategory(transactionId!, choices.categories, choices.currentCategoryId)
+      : texts.entryGone()
+  }
+
+  if (action === 'set') {
+    if (!categoryPrefix) return texts.entryGone()
+    const corrected = await context.correctCategory(telegramUserId, transactionId!, categoryPrefix)
+    return corrected
+      ? texts.categoryCorrected(corrected.amountKopecks, corrected.categoryName, corrected.keyword)
+      : texts.entryGone()
+  }
+
+  const removed = await context.deleteEntry(telegramUserId, transactionId!)
+  return removed ? texts.entryDeleted(removed.amountKopecks) : texts.entryGone()
 }
 
 /**
@@ -79,8 +126,14 @@ export async function routeUpdate(update: TelegramUpdate, context: RouterContext
   if (callback) {
     const chatId = callback.message?.chat?.id
     if (!Number.isSafeInteger(chatId)) return { kind: 'none' }
-    const message = callback.data === 'help' ? texts.help(context.links) : texts.fallback(context.links)
-    return { kind: 'answer', callbackQueryId: callback.id, chatId: chatId!, message }
+    const from = Number.isSafeInteger(callback.from?.id) ? callback.from!.id! : null
+    const message = callback.data === 'help'
+      ? texts.help(context.links)
+      : await handleButton(callback.data ?? '', from, context)
+    // A correction replaces the message it came from: the chat should not grow
+    // by two messages every time somebody fixes a category.
+    const replaceMessageId = callback.data?.startsWith('help') ? undefined : callback.message?.message_id
+    return { kind: 'answer', callbackQueryId: callback.id, chatId: chatId!, message, replaceMessageId }
   }
 
   const message = update.message

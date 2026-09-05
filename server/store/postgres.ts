@@ -14,7 +14,7 @@ import {
 } from '../../src/shared/contracts.js'
 import type { TelegramIdentity } from '../auth/telegram.js'
 import { hashQuickKey, issueQuickKey } from '../lib/quick-key.js'
-import { parseQuickAmount, resolveQuickEntry } from '../../src/shared/quick-entry.js'
+import { hintKeyword, parseQuickAmount, resolveQuickEntry } from '../../src/shared/quick-entry.js'
 import { zonedDayNumber } from '../../src/shared/timezone.js'
 import { DATA_COLORS } from '../../src/shared/design-tokens.js'
 import { resolveRange, type SnapshotRange } from '../lib/range.js'
@@ -239,6 +239,75 @@ export class PostgresFinanceStore implements FinanceStore {
   }
 
   /**
+   * A bot-recorded entry together with the person who may act on it. Every
+   * button below goes through this, so a callback naming somebody else's
+   * transaction id gets nothing rather than an error that confirms it exists.
+   */
+  private async botEntry(telegramUserId: number, transactionId: string) {
+    const result = await this.pool.query(
+      `SELECT t.id, t.workspace_id, t.note, t.amount_kopecks, t.category_id, t.version, u.id AS user_id
+         FROM transactions t
+         JOIN users u ON u.telegram_user_id=$1 AND u.deleted_at IS NULL
+        WHERE t.id=$2 AND t.deleted_at IS NULL AND t.created_by_user_id=u.id AND t.source='bot'`,
+      [telegramUserId, transactionId])
+    return result.rows[0] ?? null
+  }
+
+  async botCategoryChoices(telegramUserId: number, transactionId: string) {
+    const entry = await this.botEntry(telegramUserId, transactionId)
+    if (!entry) return null
+    const categories = await this.pool.query(
+      `SELECT id, name FROM categories
+        WHERE workspace_id=$1 AND type='expense' AND archived_at IS NULL
+        ORDER BY sort_order, name`, [entry.workspace_id])
+    return {
+      transactionId: entry.id as string,
+      currentCategoryId: entry.category_id as string | null,
+      categories: categories.rows.map((row) => ({ id: row.id as string, name: row.name as string })),
+    }
+  }
+
+  async correctBotEntry(telegramUserId: number, transactionId: string, categoryPrefix: string) {
+    const entry = await this.botEntry(telegramUserId, transactionId)
+    if (!entry) return null
+    // The callback carries a shortened id to stay inside Telegram's 64 bytes.
+    // An ambiguous prefix is refused rather than resolved to the first match.
+    const found = await this.pool.query(
+      `SELECT id, name FROM categories
+        WHERE workspace_id=$1 AND type='expense' AND archived_at IS NULL AND id::text LIKE $2 || '%'`,
+      [entry.workspace_id, categoryPrefix])
+    if (found.rowCount !== 1) return null
+    const category = found.rows[0]
+
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `UPDATE transactions SET category_id=$2, category_guessed=false, updated_by_user_id=$3,
+           version=version+1, updated_at=now() WHERE id=$1`,
+        [entry.id, category.id, entry.user_id])
+      const keyword = hintKeyword(entry.note as string)
+      if (keyword) {
+        await client.query(
+          `INSERT INTO category_hints (workspace_id, keyword, category_id) VALUES ($1,$2,$3)
+           ON CONFLICT (workspace_id, keyword) DO UPDATE SET category_id=EXCLUDED.category_id, updated_at=now()`,
+          [entry.workspace_id, keyword, category.id])
+      }
+      await client.query('COMMIT')
+      return { categoryName: category.name as string, amountKopecks: Number(entry.amount_kopecks), keyword }
+    } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
+  }
+
+  async deleteBotEntry(telegramUserId: number, transactionId: string) {
+    const entry = await this.botEntry(telegramUserId, transactionId)
+    if (!entry) return null
+    await this.pool.query(
+      `UPDATE transactions SET deleted_at=now(), updated_by_user_id=$2, version=version+1 WHERE id=$1`,
+      [entry.id, entry.user_id])
+    return { amountKopecks: Number(entry.amount_kopecks) }
+  }
+
+  /**
    * The single path every free-text entry takes, whichever door it came in by.
    * Only the source column differs, so an improvement to category matching
    * reaches the shortcut and the bot at the same moment.
@@ -256,11 +325,12 @@ export class PostgresFinanceStore implements FinanceStore {
     if (!accountId) throw notFound('Счёт не найден')
     const workspaceId = accountResult.rows[0].workspace_id as string
 
-    const [categoryResult, historyResult] = await Promise.all([
+    const [categoryResult, historyResult, hintResult] = await Promise.all([
       this.pool.query('SELECT * FROM categories WHERE workspace_id=$1', [workspaceId]),
       this.pool.query(
         `SELECT note, category_id, type FROM transactions WHERE workspace_id=$1 AND deleted_at IS NULL
          ORDER BY occurred_at DESC LIMIT 300`, [workspaceId]),
+      this.pool.query('SELECT keyword, category_id FROM category_hints WHERE workspace_id=$1', [workspaceId]),
     ])
     const categories = categoryResult.rows.map(categoryRow)
     const history = historyResult.rows.map((row) => ({
@@ -268,7 +338,8 @@ export class PostgresFinanceStore implements FinanceStore {
       categoryId: row.category_id as string | null,
       type: row.type as TransactionView['type'],
     }))
-    const entry = resolveQuickEntry(input.text, amountKopecks, categories, history)
+    const hints = new Map(hintResult.rows.map((row) => [row.keyword as string, row.category_id as string]))
+    const entry = resolveQuickEntry(input.text, amountKopecks, categories, history, hints)
 
     const inserted = await this.pool.query(
       `INSERT INTO transactions (workspace_id,type,amount_kopecks,account_id,category_id,occurred_at,note,source,category_guessed,created_by_user_id)

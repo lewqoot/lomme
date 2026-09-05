@@ -14,7 +14,7 @@ import type { TelegramIdentity } from '../auth/telegram.js'
 import type { DeliveryKind, ReminderCandidate } from '../telegram/reminders.js'
 import { calculateSummary } from '../lib/analytics.js'
 import { issueQuickKey, quickKeyMatches } from '../lib/quick-key.js'
-import { parseQuickAmount, resolveQuickEntry } from '../../src/shared/quick-entry.js'
+import { hintKeyword, parseQuickAmount, resolveQuickEntry } from '../../src/shared/quick-entry.js'
 import { DATA_COLORS } from '../../src/shared/design-tokens.js'
 import { resolveRange, type SnapshotRange } from '../lib/range.js'
 import { decodeTransactionCursor, encodeTransactionCursor } from '../lib/transaction-cursor.js'
@@ -65,6 +65,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private processedUpdates = new Set<number>()
   private reminders = new Map<string, { enabled: boolean; localTime: string; daysOfWeek: number[] }>()
   private reminderDeliveries = new Set<string>()
+  private categoryHints = new Map<string, Map<string, string>>()
   private lastDelivery = new Map<string, Date>()
   private workspaces = new Map<string, InternalWorkspace>()
   private members = new Map<string, MemberView[]>()
@@ -222,6 +223,58 @@ export class MemoryFinanceStore implements FinanceStore {
     return this.recordQuickEntry(userId, input, 'bot')
   }
 
+  private botEntry(telegramUserId: number, transactionId: string) {
+    const userId = this.usersByTelegram.get(telegramUserId)
+    if (!userId) return null
+    const user = this.users.get(userId)!
+    for (const [workspaceId, entries] of this.transactions) {
+      const found = entries.find((item) => item.id === transactionId
+        && item.source === 'bot'
+        && item.authorName === user.firstName)
+      if (found) return { userId, workspaceId, entry: found }
+    }
+    return null
+  }
+
+  async botCategoryChoices(telegramUserId: number, transactionId: string) {
+    const found = this.botEntry(telegramUserId, transactionId)
+    if (!found) return null
+    return {
+      transactionId,
+      currentCategoryId: found.entry.categoryId,
+      categories: (this.categories.get(found.workspaceId) || [])
+        .filter((item) => item.type === 'expense' && !item.archivedAt)
+        .map((item) => ({ id: item.id, name: item.name })),
+    }
+  }
+
+  async correctBotEntry(telegramUserId: number, transactionId: string, categoryPrefix: string) {
+    const found = this.botEntry(telegramUserId, transactionId)
+    if (!found) return null
+    const matches = (this.categories.get(found.workspaceId) || [])
+      .filter((item) => item.type === 'expense' && !item.archivedAt && item.id.startsWith(categoryPrefix))
+    if (matches.length !== 1) return null
+    const category = matches[0]!
+    found.entry.categoryId = category.id
+    found.entry.categoryGuessed = false
+    found.entry.version += 1
+    const keyword = hintKeyword(found.entry.note)
+    if (keyword) {
+      const hints = this.categoryHints.get(found.workspaceId) || new Map<string, string>()
+      hints.set(keyword, category.id)
+      this.categoryHints.set(found.workspaceId, hints)
+    }
+    return { categoryName: category.name, amountKopecks: found.entry.amountKopecks, keyword }
+  }
+
+  async deleteBotEntry(telegramUserId: number, transactionId: string) {
+    const found = this.botEntry(telegramUserId, transactionId)
+    if (!found) return null
+    this.transactions.set(found.workspaceId, (this.transactions.get(found.workspaceId) || [])
+      .filter((item) => item.id !== transactionId))
+    return { amountKopecks: found.entry.amountKopecks }
+  }
+
   private async recordQuickEntry(userId: string, input: QuickEntryInput, source: 'shortcut' | 'bot') {
     const amountKopecks = parseQuickAmount(input.amount)
     if (!amountKopecks) throw new AppError(400, 'QUICK_AMOUNT_INVALID', 'Не разобрали сумму')
@@ -235,7 +288,7 @@ export class MemoryFinanceStore implements FinanceStore {
     const categories = this.categories.get(workspaceId) || []
     const history = (this.transactions.get(workspaceId) || [])
       .slice().sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)).slice(0, 300)
-    const entry = resolveQuickEntry(input.text, amountKopecks, categories, history)
+    const entry = resolveQuickEntry(input.text, amountKopecks, categories, history, this.categoryHints.get(workspaceId))
 
     const transaction: TransactionView = {
       id: randomUUID(), type: 'expense', amountKopecks: entry.amountKopecks, accountId: account.id,
