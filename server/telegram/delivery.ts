@@ -13,16 +13,18 @@
 import type { FinanceStore } from '../store/types.js'
 import { sendMessage, type BotMessage } from './api.js'
 import {
+  eveningSlot,
   lastMonthRange,
   lastWeekRange,
   previousWeekRange,
   monthlyDigestDueAt,
   reminderDueAt,
+  startOfLocalDay,
   weeklyDigestDueAt,
   type DeliveryKind,
   type ReminderCandidate,
 } from './reminders.js'
-import { dailyReminder, monthlyDigest, weeklyDigest } from './texts.js'
+import { dailyReminder, monthlyDigest, sharedWalletDigest, weeklyDigest } from './texts.js'
 
 const PACING_MS = 40
 
@@ -90,6 +92,16 @@ async function planFor(store: FinanceStore, candidate: ReminderCandidate, now: D
   if (weekly) {
     const message = await weeklyMessage(store, candidate, now)
     if (message) return { kind: 'weekly', scheduledFor: weekly, message }
+  }
+
+  // The shared digest and the reminder share one evening slot, and the digest
+  // wins: what other people recorded is news, a nudge is not.
+  const evening = eveningSlot(candidate, now)
+  if (evening) {
+    const activity = await store.sharedActivitySince(candidate.userId, startOfLocalDay(candidate.timezone, now))
+    if (activity) {
+      return { kind: 'shared', scheduledFor: evening, message: sharedWalletDigest(activity.accountName, activity.byAuthor) }
+    }
   }
 
   const daily = reminderDueAt(candidate, now)

@@ -54,6 +54,12 @@ export type AcceptedInvite = {
   joined?: { inviterTelegramUserId: number | null; accountName: string; memberName: string }
 }
 
+/** One evening's worth of activity in a wallet shared with other people. */
+export type SharedActivity = {
+  accountName: string
+  byAuthor: Array<{ name: string; count: number; amountKopecks: number; isSelf: boolean }>
+}
+
 export type SessionUser = {
   id: string
   firstName: string
@@ -117,6 +123,12 @@ export interface FinanceStore {
   saveReminderSettings(userId: string, input: ReminderSettingsInput): Promise<ReminderSettings>
   /** Everyone a daily reminder could reach; who actually gets one is decided per person. */
   reminderCandidates(): Promise<ReminderCandidate[]>
+  /**
+   * What other people put into this person's shared wallet since `since`.
+   * Null when they have no shared wallet or nobody else recorded anything —
+   * a digest of one's own entries would be telling someone what they did.
+   */
+  sharedActivitySince(userId: string, since: Date): Promise<SharedActivity | null>
   /** False when this slot was already claimed by another worker tick. */
   claimDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date): Promise<boolean>
   settleDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date, error?: string): Promise<void>

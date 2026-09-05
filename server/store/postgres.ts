@@ -25,6 +25,7 @@ import { hashToken, randomToken } from '../lib/security.js'
 import type {
   AccountInput,
   ReminderSettingsInput,
+  SharedActivity,
   AccountUpdate,
   ActiveAccountInput,
   CategoryInput,
@@ -588,6 +589,32 @@ export class PostgresFinanceStore implements FinanceStore {
       deliveredCount: Number(row.delivered_count),
       lastDeliveryAt: row.last_delivery_at ? new Date(row.last_delivery_at as string) : null,
     }))
+  }
+
+  async sharedActivitySince(userId: string, since: Date): Promise<SharedActivity | null> {
+    // The wallet this person is actually looking at, and only if it is shared.
+    const account = await this.pool.query(
+      `SELECT a.id, a.name FROM users u
+         JOIN accounts a ON a.id=u.active_account_id AND a.archived_at IS NULL
+        WHERE u.id=$1 AND (SELECT count(*) FROM account_members m WHERE m.account_id=a.id) > 1`, [userId])
+    if (!account.rowCount) return null
+
+    const rows = await this.pool.query(
+      `SELECT COALESCE(u.first_name,'Участник') AS name, u.id=$1 AS is_self,
+              count(*)::int AS entries, SUM(t.amount_kopecks)::bigint AS total
+         FROM transactions t LEFT JOIN users u ON u.id=t.created_by_user_id
+        WHERE t.account_id=$2 AND t.deleted_at IS NULL AND t.type='expense' AND t.created_at >= $3
+        GROUP BY u.id, u.first_name
+        ORDER BY total DESC`, [userId, account.rows[0].id, since])
+    const byAuthor = rows.rows.map((row) => ({
+      name: row.name as string,
+      count: Number(row.entries),
+      amountKopecks: Number(row.total),
+      isSelf: Boolean(row.is_self),
+    }))
+    // Nothing from anybody else is not news.
+    if (!byAuthor.some((item) => !item.isSelf)) return null
+    return { accountName: account.rows[0].name as string, byAuthor }
   }
 
   /** The unique index on (user, kind, scheduled_for) is what stops a second send. */

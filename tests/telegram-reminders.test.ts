@@ -315,6 +315,82 @@ describe('сводка за неделю', () => {
   })
 })
 
+describe('дайджест общего кошелька', () => {
+  let store: MemoryFinanceStore
+  let owner: Awaited<ReturnType<MemoryFinanceStore['createSession']>>
+  let guest: Awaited<ReturnType<MemoryFinanceStore['createSession']>>
+
+  beforeEach(async () => {
+    process.env.TELEGRAM_BOT_TOKEN = 'test-token'
+    store = new MemoryFinanceStore()
+    owner = await store.createSession({ id: 901, firstName: 'Алекс', lastName: null, username: 'alex', languageCode: 'ru', allowsWriteToPm: true }, 'Europe/Moscow')
+    guest = await store.createSession({ id: 902, firstName: 'Ирина', lastName: null, username: 'irina', languageCode: 'ru', allowsWriteToPm: true }, 'Europe/Moscow')
+    const snapshot = await store.snapshot(owner.user.id)
+    const invite = await store.createAccountInvite(owner.user.id, snapshot.activeAccountId!)
+    await store.acceptAccountInvite(guest.user.id, invite.token)
+    await store.saveReminderSettings(owner.user.id, { enabled: true, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] })
+  })
+
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  function telegram() {
+    const sent: Array<{ chatId: number; text: string }> = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/sendMessage')) {
+        const body = JSON.parse(String(init?.body)) as { chat_id: number; text: string }
+        sent.push({ chatId: body.chat_id, text: body.text })
+      }
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    return sent
+  }
+
+  async function spendAs(userId: string, amountKopecks: number, key: string) {
+    const snapshot = await store.snapshot(userId)
+    await store.createTransaction(userId, {
+      workspaceId: snapshot.activeWorkspaceId,
+      type: 'expense',
+      amountKopecks,
+      accountId: snapshot.activeAccountId!,
+      categoryId: null,
+      occurredAt: MONDAY_EVENING.toISOString(),
+      note: '',
+      source: 'manual',
+    }, key)
+  }
+
+  it('рассказывает владельцу, что записал второй участник', async () => {
+    await spendAs(guest.user.id, 560_000, 'guest-1')
+    await spendAs(guest.user.id, 40_000, 'guest-2')
+    const sent = telegram()
+
+    const report = await runDeliveries(store, MONDAY_EVENING)
+
+    expect(report).toMatchObject({ sent: 1 })
+    expect(sent[0]!.chatId).toBe(901)
+    expect(sent[0]!.text).toContain('Сегодня в «Кошелёк»')
+    expect(sent[0]!.text.replace(/[\u00a0\u202f]/g, ' ')).toContain('Ирина — 2 записи на 6 000 ₽')
+  })
+
+  it('не пересказывает человеку его собственные траты', async () => {
+    await spendAs(owner.user.id, 100_000, 'own-1')
+    const sent = telegram()
+
+    await runDeliveries(store, MONDAY_EVENING)
+
+    // Записи за сегодня есть, значит и напоминание не нужно: тишина.
+    expect(sent).toHaveLength(0)
+  })
+
+  it('вместо дайджеста шлёт напоминание, когда в кошельке пусто', async () => {
+    const sent = telegram()
+
+    await runDeliveries(store, MONDAY_EVENING)
+
+    expect(sent[0]!.text).toContain('напомнить про траты')
+  })
+})
+
 describe('настройки напоминаний через API', () => {
   let app: Awaited<ReturnType<typeof buildApp>>
   let store: MemoryFinanceStore

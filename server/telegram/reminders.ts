@@ -25,7 +25,7 @@ export type ReminderCandidate = {
 }
 
 /** Every schedule the worker can send on, in the order it resolves conflicts. */
-export type DeliveryKind = 'monthly' | 'weekly' | 'daily'
+export type DeliveryKind = 'monthly' | 'weekly' | 'shared' | 'daily'
 
 /** Sunday evening, once the week is effectively over but before people turn in. */
 const WEEKLY_HOUR = 19
@@ -64,18 +64,32 @@ export function zonedIsoWeekday(instant: Date, timeZone: string) {
  * this is not a plain cron broadcast.
  */
 export function reminderDueAt(candidate: ReminderCandidate, now: Date): Date | null {
+  const scheduledFor = eveningSlot(candidate, now)
+  if (!scheduledFor) return null
+  // Nothing to remind about: they already recorded something today.
+  if (sameLocalDay(candidate.lastEntryAt, now, candidate.timezone)) return null
+  return scheduledFor
+}
+
+/**
+ * The evening slot itself, without the reasons a reminder would decline it.
+ * The shared-wallet digest and the reminder compete for this one moment, so
+ * whichever wins, nobody gets two messages in a night.
+ */
+export function eveningSlot(candidate: ReminderCandidate, now: Date): Date | null {
   const time = localTimeParts(candidate.localTime)
   if (!time) return null
   if (!candidate.daysOfWeek.includes(zonedIsoWeekday(now, candidate.timezone))) return null
-
   const scheduledFor = atLocalHour(candidate.timezone, now, time.hour, time.minute)
   if (!withinWindow(scheduledFor, now)) return null
-  if (sameLocalDay(candidate.lastEntryAt, now, candidate.timezone)) return null
-  // A digest already went out this evening; two messages in one night is the
-  // thing people mute a bot for.
   if (sameLocalDay(candidate.lastDeliveryAt, now, candidate.timezone)) return null
-
   return scheduledFor
+}
+
+/** Local midnight of the day `now` falls on, for "since today started". */
+export function startOfLocalDay(timeZone: string, now: Date) {
+  const { year, month, day } = zonedParts(now, timeZone)
+  return zonedMidnight(year, month, day, timeZone)
 }
 
 /** The instant of a wall-clock hour today, in the person's own zone. */

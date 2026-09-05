@@ -30,6 +30,7 @@ import type {
   FinanceStore,
   QuickEntryInput,
   ReminderSettingsInput,
+  SharedActivity,
   SessionUser,
   TransactionInput,
   TransactionUpdate,
@@ -540,6 +541,28 @@ export class MemoryFinanceStore implements FinanceStore {
       })
     }
     return candidates
+  }
+
+  async sharedActivitySince(userId: string, since: Date): Promise<SharedActivity | null> {
+    const user = this.users.get(userId)
+    const accountId = user?.activeAccountId
+    if (!accountId) return null
+    const access = this.accountAccess.get(accountId)
+    if (!access || access.size < 2) return null
+    const account = this.findAccount(accountId)
+
+    const totals = new Map<string, { count: number; amountKopecks: number }>()
+    for (const entry of this.transactions.get(account.workspaceId) || []) {
+      if (entry.accountId !== accountId || entry.type !== 'expense') continue
+      if (new Date(entry.occurredAt) < since) continue
+      const current = totals.get(entry.authorName) || { count: 0, amountKopecks: 0 }
+      totals.set(entry.authorName, { count: current.count + 1, amountKopecks: current.amountKopecks + entry.amountKopecks })
+    }
+    const byAuthor = [...totals.entries()]
+      .map(([name, value]) => ({ name, ...value, isSelf: name === user!.firstName }))
+      .sort((left, right) => right.amountKopecks - left.amountKopecks)
+    if (!byAuthor.some((item) => !item.isSelf)) return null
+    return { accountName: account.name, byAuthor }
   }
 
   async claimDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date) {

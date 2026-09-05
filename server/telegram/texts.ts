@@ -232,6 +232,24 @@ export function accountInviteAccepted(memberName: string, accountName: string): 
   return { text: `🤝 ${memberName} присоединился к кошельку «${accountName}»` }
 }
 
+/**
+ * What the other people in a shared wallet put in today. Sent instead of the
+ * evening reminder, never alongside it: one message a night is the rule.
+ */
+export function sharedWalletDigest(accountName: string, byAuthor: Array<{ name: string; count: number; amountKopecks: number }>): BotMessage {
+  const entries = (count: number) => {
+    const tail = count % 100 >= 11 && count % 100 <= 14 ? 'записей' : ['записей', 'запись', 'записи', 'записи', 'записи'][Math.min(count % 10, 4)] ?? 'записей'
+    return `${count} ${tail}`
+  }
+  return {
+    text: [
+      `👨‍👩‍👧 Сегодня в «${accountName}»`,
+      '',
+      ...byAuthor.map((item) => `${item.name} — ${entries(item.count)} на ${money(item.amountKopecks)}`),
+    ].join('\n'),
+  }
+}
+
 export function accountInviteExpired(): BotMessage {
   return {
     text: [
