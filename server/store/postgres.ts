@@ -53,7 +53,7 @@ export class PostgresFinanceStore implements FinanceStore {
       let userId: string
       if (!userResult.rowCount) {
         userId = randomUUID()
-        await client.query(`INSERT INTO users (id, telegram_user_id, first_name, last_name, username, timezone) VALUES ($1,$2,$3,$4,$5,$6)`, [userId, identity.id, identity.firstName, identity.lastName, identity.username, timezone])
+        await client.query(`INSERT INTO users (id, telegram_user_id, first_name, last_name, username, timezone, bot_write_access) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [userId, identity.id, identity.firstName, identity.lastName, identity.username, timezone, identity.allowsWriteToPm === true])
         const workspaceId = randomUUID()
         await client.query(`INSERT INTO workspaces (id, kind, name, owner_user_id) VALUES ($1,'personal','Личные финансы',$2)`, [workspaceId, userId])
         await client.query(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1,$2,'owner')`, [workspaceId, userId])
@@ -61,13 +61,33 @@ export class PostgresFinanceStore implements FinanceStore {
         await client.query(`UPDATE users SET active_workspace_id=$2,active_account_id=$3 WHERE id=$1`, [userId, workspaceId, accountId])
       } else {
         userId = userResult.rows[0].id as string
-        await client.query(`UPDATE users SET first_name=$2,last_name=$3,username=$4,timezone=$5,updated_at=now() WHERE id=$1`, [userId, identity.firstName, identity.lastName, identity.username, timezone])
+        await client.query(`UPDATE users SET first_name=$2,last_name=$3,username=$4,timezone=$5,bot_write_access=bot_write_access OR $6,updated_at=now() WHERE id=$1`, [userId, identity.firstName, identity.lastName, identity.username, timezone, identity.allowsWriteToPm === true])
       }
       const token = randomToken()
       await client.query(`INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1,$2,now()+interval '30 days')`, [userId, hashToken(token)])
       await client.query('COMMIT')
       return { token, user: { id: userId, firstName: identity.firstName, username: identity.username, timezone } }
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
+  }
+
+  async noteBotContact(telegramUserId: number) {
+    const result = await this.pool.query(
+      `UPDATE users SET bot_write_access=true,updated_at=now() WHERE telegram_user_id=$1 AND deleted_at IS NULL`,
+      [telegramUserId],
+    )
+    return { known: Boolean(result.rowCount) }
+  }
+
+  async claimTelegramUpdate(updateId: number) {
+    const result = await this.pool.query(
+      `INSERT INTO processed_telegram_updates (update_id) VALUES ($1) ON CONFLICT (update_id) DO NOTHING`,
+      [updateId],
+    )
+    return result.rowCount === 1
+  }
+
+  async releaseTelegramUpdate(updateId: number) {
+    await this.pool.query(`DELETE FROM processed_telegram_updates WHERE update_id=$1`, [updateId])
   }
 
   async userForSession(token: string) {
@@ -480,7 +500,10 @@ export class PostgresFinanceStore implements FinanceStore {
   }
   async runWorkerBatch() {
     const expired = await this.pool.query(`UPDATE media_objects SET deleted_at=now() WHERE deleted_at IS NULL AND expires_at<=now() RETURNING id`)
-    return { expiredMedia: expired.rowCount || 0 }
+    // Telegram stops retrying an update long before a day is out, so older rows
+    // only keep the deduplication table growing.
+    const forgotten = await this.pool.query(`DELETE FROM processed_telegram_updates WHERE processed_at < now() - interval '1 day'`)
+    return { expiredMedia: expired.rowCount || 0, forgottenUpdates: forgotten.rowCount || 0 }
   }
 
   async health() { await this.pool.query('SELECT 1'); return { database: 'ok' as const } }

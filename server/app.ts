@@ -27,6 +27,8 @@ import {
 } from '../src/shared/contracts.js'
 import { parseQuickAmount, splitQuickInput } from '../src/shared/quick-entry.js'
 import { telegramStartParam, validateTelegramInitData, type TelegramIdentity } from './auth/telegram.js'
+import { answerCallbackQuery, sendMessage } from './telegram/api.js'
+import { routeUpdate, type TelegramUpdate } from './telegram/router.js'
 import { AppError } from './lib/errors.js'
 import { ensureSameOrigin } from './lib/security.js'
 import type { FinanceStore, SessionUser } from './store/types.js'
@@ -82,6 +84,16 @@ export function shortcutErrorText(code: string) {
   }
   if (code === 'RATE_LIMITED') return '⏳ Слишком часто\nПопробуй через минуту'
   return '⚠️ Не записалось\nПопробуй ещё раз'
+}
+
+/**
+ * Telegram only accepts an https address in a web_app button, so a local run
+ * (APP_URL is http there) gets messages without the open-app button instead of
+ * a rejected send.
+ */
+function telegramWebAppUrl() {
+  const value = process.env.APP_URL?.trim()
+  return value && value.startsWith('https://') ? value : null
 }
 
 function normalizedBotUsername(value?: string) {
@@ -379,32 +391,43 @@ export async function buildApp(store: FinanceStore) {
   app.post('/api/v1/telegram/webhook/:secret', async (request, reply) => {
     const secret = (request.params as { secret: string }).secret
     if (!process.env.TELEGRAM_WEBHOOK_SECRET || secret !== process.env.TELEGRAM_WEBHOOK_SECRET) throw new AppError(404, 'NOT_FOUND', 'Не найдено')
-    const update = request.body as { update_id?: number; message?: { text?: string; chat?: { id?: number; type?: string } } }
+    const update = request.body as TelegramUpdate
     request.log.info({ event: 'telegram_update_received', updateId: update.update_id })
-    const start = update.message?.text?.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+invite_([A-Za-z0-9_-]{20,120})$/)
-    const chatId = update.message?.chat?.id
-    if (start && Number.isSafeInteger(chatId) && process.env.TELEGRAM_BOT_TOKEN) {
-      const token = start[1]!
-      let text = 'Это приглашение недействительно или уже устарело.'
-      let replyMarkup: { inline_keyboard: Array<Array<{ text: string; url: string }>> } | undefined
-      try {
-        const preview = await store.previewAccountInvite('', token)
-        if (preview.status === 'active' || preview.status === 'accepted') {
+
+    // Telegram redelivers an update whenever the webhook is slow to answer, so
+    // the same /start would otherwise be greeted twice.
+    const updateId = Number.isSafeInteger(update.update_id) ? update.update_id! : null
+    if (updateId !== null && !(await store.claimTelegramUpdate(updateId))) {
+      request.log.info({ event: 'telegram_update_duplicate', updateId }, 'Telegram update already handled')
+      return reply.send({ ok: true })
+    }
+
+    const action = await routeUpdate(update, {
+      appUrl: telegramWebAppUrl(),
+      noteBotContact: (telegramUserId) => store.noteBotContact(telegramUserId),
+      resolveInvite: async (token) => {
+        try {
+          const preview = await store.previewAccountInvite('', token)
+          if (preview.status !== 'active' && preview.status !== 'accepted') return null
           const botUsername = await inviteBotUsername()
-          const appUrl = `https://t.me/${botUsername}?startapp=invite_${token}&mode=fullscreen`
-          text = `Вас пригласили в общий кошелёк «${preview.accountName}» в Lomme.`
-          replyMarkup = { inline_keyboard: [[{ text: 'Открыть приглашение', url: appUrl }]] }
+          return { accountName: preview.accountName, url: `https://t.me/${botUsername}?startapp=invite_${token}&mode=fullscreen` }
+        } catch {
+          // A malformed, revoked or unknown link is answered, not retried.
+          return null
         }
-      } catch {
-        // Return a useful bot message for malformed, revoked and unknown links.
-      }
-      const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
-      })
-      if (!response.ok) {
-        request.log.error({ event: 'telegram_invite_delivery_failed', status: response.status, updateId: update.update_id }, 'Telegram invite delivery failed')
+      },
+    })
+
+    if (action.kind === 'none') return reply.send({ ok: true })
+    if (action.kind === 'answer') await answerCallbackQuery(action.callbackQueryId)
+
+    const outcome = await sendMessage(action.chatId, action.message)
+    if (!outcome.ok) {
+      request.log.error({ event: 'telegram_reply_failed', updateId, permanent: outcome.permanent, description: outcome.description }, 'Telegram reply failed')
+      // A retryable failure has to leave the update claimable again, otherwise
+      // Telegram's next attempt is dropped as a duplicate and the reply is lost.
+      if (!outcome.permanent) {
+        if (updateId !== null) await store.releaseTelegramUpdate(updateId)
         return reply.code(502).send({ ok: false })
       }
     }

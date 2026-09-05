@@ -37,6 +37,7 @@ import { expenseCategories, incomeCategories } from './default-categories.js'
 
 type InternalUser = SessionUser & {
   telegramUserId: number
+  botWriteAccess: boolean
   activeWorkspaceId: string | null
   activeAccountId: string | null
 }
@@ -58,6 +59,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private users = new Map<string, InternalUser>()
   private usersByTelegram = new Map<number, string>()
   private sessions = new Map<string, { userId: string; expiresAt: Date }>()
+  private processedUpdates = new Set<number>()
   private workspaces = new Map<string, InternalWorkspace>()
   private members = new Map<string, MemberView[]>()
   private accounts = new Map<string, AccountView[]>()
@@ -73,7 +75,7 @@ export class MemoryFinanceStore implements FinanceStore {
     let userId = this.usersByTelegram.get(identity.id)
     if (!userId) {
       userId = randomUUID()
-      const user: InternalUser = { id: userId, telegramUserId: identity.id, firstName: identity.firstName, username: identity.username, timezone, activeWorkspaceId: null, activeAccountId: null }
+      const user: InternalUser = { id: userId, telegramUserId: identity.id, firstName: identity.firstName, username: identity.username, timezone, botWriteAccess: identity.allowsWriteToPm === true, activeWorkspaceId: null, activeAccountId: null }
       this.users.set(userId, user)
       this.usersByTelegram.set(identity.id, userId)
       this.createPersonalSpace(user)
@@ -82,6 +84,8 @@ export class MemoryFinanceStore implements FinanceStore {
       user.firstName = identity.firstName
       user.username = identity.username
       user.timezone = timezone
+      // A launch without the flag is not a revocation of a grant already given.
+      user.botWriteAccess = user.botWriteAccess || identity.allowsWriteToPm === true
     }
     const token = randomToken()
     this.sessions.set(hashToken(token), { userId, expiresAt: addDays(new Date(), 30) })
@@ -96,6 +100,21 @@ export class MemoryFinanceStore implements FinanceStore {
   }
 
   async telegramUserIdFor(userId: string) { return this.users.get(userId)?.telegramUserId ?? null }
+
+  async noteBotContact(telegramUserId: number) {
+    const userId = this.usersByTelegram.get(telegramUserId)
+    if (!userId) return { known: false }
+    this.users.get(userId)!.botWriteAccess = true
+    return { known: true }
+  }
+
+  async claimTelegramUpdate(updateId: number) {
+    if (this.processedUpdates.has(updateId)) return false
+    this.processedUpdates.add(updateId)
+    return true
+  }
+
+  async releaseTelegramUpdate(updateId: number) { this.processedUpdates.delete(updateId) }
 
   async revokeSession(token: string) { this.sessions.delete(hashToken(token)) }
 
@@ -462,7 +481,7 @@ export class MemoryFinanceStore implements FinanceStore {
     for (const account of this.accounts.get(workspaceId) || []) this.accountAccess.get(account.id)?.delete(memberUserId)
   }
 
-  async runWorkerBatch() { return { expiredMedia: 0 } }
+  async runWorkerBatch() { this.processedUpdates.clear(); return { expiredMedia: 0, forgottenUpdates: 0 } }
   async health() { return { database: 'memory' as const } }
   async close() {}
 

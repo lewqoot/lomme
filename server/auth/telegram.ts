@@ -6,6 +6,13 @@ export type TelegramIdentity = {
   lastName: string | null
   username: string | null
   languageCode: string | null
+  /**
+   * Telegram sets this when the person has allowed the bot to message them.
+   * It rides inside signed initData, so a Mini App launch tells us whether the
+   * bot may write without asking anyone anything. Absent for every launch that
+   * predates the grant, which is why it is optional rather than false.
+   */
+  allowsWriteToPm?: boolean
 }
 
 type TelegramUserPayload = {
@@ -14,6 +21,7 @@ type TelegramUserPayload = {
   last_name?: string
   username?: string
   language_code?: string
+  allows_write_to_pm?: boolean
 }
 
 export function validateTelegramInitData(
@@ -61,6 +69,7 @@ export function validateTelegramInitData(
     lastName: user.last_name || null,
     username: user.username || null,
     languageCode: user.language_code || null,
+    allowsWriteToPm: user.allows_write_to_pm === true,
   }
 }
 
@@ -81,6 +90,7 @@ export function createTelegramInitDataForTest(identity: TelegramIdentity, botTok
       last_name: identity.lastName || undefined,
       username: identity.username || undefined,
       language_code: identity.languageCode || undefined,
+      allows_write_to_pm: identity.allowsWriteToPm || undefined,
     }),
   })
   if (signature) params.set('signature', signature)

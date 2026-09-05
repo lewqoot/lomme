@@ -137,7 +137,7 @@ describe('wallet selection and sharing', () => {
       expect(String(input)).toBe('https://api.telegram.org/bottest-token/sendMessage')
       const body = JSON.parse(String(init?.body)) as { chat_id: number; text: string; reply_markup: { inline_keyboard: Array<Array<{ web_app: { url: string } }>> } }
       expect(body.chat_id).toBe(777)
-      expect(body.text).toContain('Вас пригласили в общий кошелёк «Кошелёк»')
+      expect(body.text).toContain('Тебя зовут в общий кошелёк «Кошелёк»')
       expect(body.reply_markup.inline_keyboard[0]![0]!).toMatchObject({ url: expect.stringMatching(/^https:\/\/t\.me\/Lommebot\?startapp=invite_.+&mode=fullscreen$/) })
       return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
     })

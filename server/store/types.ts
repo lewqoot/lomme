@@ -41,6 +41,22 @@ export interface FinanceStore {
   createSession(identity: TelegramIdentity, timezone: string): Promise<{ token: string; user: SessionUser }>
   userForSession(token: string): Promise<SessionUser | null>
   telegramUserIdFor(userId: string): Promise<number | null>
+  /**
+   * Records that the bot is allowed to write to this person and reports whether
+   * they already use Lomme, so the bot can greet a newcomer differently.
+   */
+  noteBotContact(telegramUserId: number): Promise<{ known: boolean }>
+  /**
+   * False when this update was already handled. Telegram redelivers an update
+   * whenever the webhook is slow to answer, and a replayed /start would send a
+   * second greeting.
+   */
+  claimTelegramUpdate(updateId: number): Promise<boolean>
+  /**
+   * Gives a claimed update back after a delivery failure worth retrying, so
+   * Telegram's redelivery is not silently swallowed as a duplicate.
+   */
+  releaseTelegramUpdate(updateId: number): Promise<void>
   revokeSession(token: string): Promise<void>
   snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, accountId?: string | null): Promise<AppSnapshot>
   transactionsPage(userId: string, workspaceId: string, range: SnapshotRange, cursor?: string, limit?: number, accountId?: string | null): Promise<TransactionPage>
@@ -71,7 +87,7 @@ export interface FinanceStore {
   createInvite(userId: string, workspaceId: string): Promise<{ token: string; expiresAt: string }>
   acceptInvite(userId: string, token: string): Promise<{ workspaceId: string }>
   removeMember(userId: string, workspaceId: string, memberUserId: string): Promise<void>
-  runWorkerBatch(): Promise<{ expiredMedia: number }>
+  runWorkerBatch(): Promise<{ expiredMedia: number; forgottenUpdates: number }>
   health(): Promise<{ database: 'ok' | 'memory' }>
   close(): Promise<void>
 }
