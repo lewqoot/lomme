@@ -133,6 +133,28 @@ describe('правка записи кнопками', () => {
     expect(sent[0]?.text).toBe('Этой записи уже нет.')
   })
 
+  it('отвечает новым сообщением, когда прежнее уже нельзя изменить', async () => {
+    const { id } = await record('пятёрочка 2340')
+    // Telegram отвечает так, когда сообщение с кнопкой удалили.
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      const method = url.split('/').pop()!
+      if (method === 'editMessageText') {
+        return new Response(JSON.stringify({ ok: false, error_code: 400, description: 'Bad Request: message to edit not found' }),
+          { status: 400, headers: { 'content-type': 'application/json' } })
+      }
+      if (method === 'sendMessage') sent.push({ method, text: JSON.parse(String(init?.body)).text as string })
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 43 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+
+    const response = await press(`del:${id}`)
+
+    // Не 502: повторять нечего, ответ доставлен другим способом.
+    expect(response.statusCode).toBe(200)
+    expect(sent.at(-1)).toMatchObject({ method: 'sendMessage' })
+    expect(sent.at(-1)?.text).toContain('Удалил запись')
+  })
+
   it('игнорирует испорченный callback вместо падения', async () => {
     const response = await press('set:не-uuid:zzzz')
 

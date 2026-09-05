@@ -458,10 +458,13 @@ export async function buildApp(store: FinanceStore) {
     if (action.kind === 'answer') await answerCallbackQuery(action.callbackQueryId)
 
     // Replacing the message a button sat on keeps a correction from adding a
-    // second bubble to the chat every time.
-    const outcome = action.kind === 'answer' && action.replaceMessageId !== undefined
+    // second bubble to the chat every time. If that message is gone — deleted,
+    // or older than Telegram will edit — the answer is still owed, so it goes
+    // out as a new one rather than being lost.
+    const edited = action.kind === 'answer' && action.replaceMessageId !== undefined
       ? await editMessage(action.chatId, action.replaceMessageId, action.message)
-      : await sendMessage(action.chatId, action.message)
+      : null
+    const outcome = edited?.ok ? edited : await sendMessage(action.chatId, action.message)
     if (!outcome.ok) {
       request.log.error({ event: 'telegram_reply_failed', updateId, permanent: outcome.permanent, description: outcome.description }, 'Telegram reply failed')
       // A retryable failure has to leave the update claimable again, otherwise

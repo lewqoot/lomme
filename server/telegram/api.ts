@@ -44,7 +44,7 @@ export function botToken() {
  */
 function isPermanent(status: number, description: string) {
   if (status === 403) return true
-  return status === 400 && /chat not found|user is deactivated|bot was blocked/i.test(description)
+  return status === 400 && /chat not found|user is deactivated|bot was blocked|message to edit not found|message can't be edited/i.test(description)
 }
 
 async function call<T>(method: string, payload: unknown): Promise<ApiResponse<T> & { status: number }> {
@@ -77,7 +77,13 @@ export async function sendMessage(chatId: number, message: BotMessage): Promise<
   return { ok: false, permanent: false, description, retryAfter: result.parameters?.retry_after }
 }
 
-/** Replaces the message a button was attached to, so the chat does not grow. */
+/**
+ * Replaces the message a button was attached to, so the chat does not grow.
+ *
+ * The message can be gone — deleted by the reader, or too old for Telegram to
+ * edit — and that is a settled answer, not something to retry. Callers fall
+ * back to sending a new message so the answer still arrives.
+ */
 export async function editMessage(chatId: number, messageId: number, message: BotMessage): Promise<SendOutcome> {
   const entities = leadingEmojiEntities(message.text)
   const result = await call<{ message_id: number }>('editMessageText', {
