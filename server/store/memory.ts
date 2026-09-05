@@ -60,6 +60,43 @@ type InternalAccountInvite = {
   revokedAt: Date | null
 }
 
+const normalizeSearch = (value: string) => value
+  .toLocaleLowerCase('ru')
+  .replaceAll('ё', 'е')
+  .replace(/[\u00a0\u202f]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+
+function transactionMatchesSearch(
+  transaction: TransactionView,
+  needle: string,
+  categoryNames: Map<string, string>,
+  accountNames: Map<string, string>,
+) {
+  const amount = new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: transaction.amountKopecks % 100 ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(transaction.amountKopecks / 100)
+  const occurredAt = transaction.occurredAt.slice(0, 10)
+  const date = `${occurredAt.slice(8, 10)}.${occurredAt.slice(5, 7)}.${occurredAt.slice(0, 4)}`
+  const type = transaction.type === 'expense' ? 'расход трата' : transaction.type === 'income' ? 'доход пополнение' : 'перевод'
+  const haystack = normalizeSearch([
+    transaction.note,
+    categoryNames.get(transaction.categoryId || ''),
+    accountNames.get(transaction.accountId),
+    accountNames.get(transaction.targetAccountId || ''),
+    amount,
+    amount.replaceAll(' ', '').replaceAll(' ', ''),
+    `${amount} ₽`,
+    type,
+    occurredAt,
+    date,
+  ].filter(Boolean).join(' '))
+  const compactAmount = normalizeSearch(amount).replace(/[\s₽]/g, '')
+  const compactNeedle = needle.replace(/[\s₽]/g, '')
+  return haystack.includes(needle) || compactAmount.includes(compactNeedle)
+}
+
 
 export class MemoryFinanceStore implements FinanceStore {
   private users = new Map<string, InternalUser>()
@@ -226,6 +263,16 @@ export class MemoryFinanceStore implements FinanceStore {
     }
     if (!allowed.size) throw forbidden('Нет доступа к этому пространству')
     return this.pageFor(workspaceId, resolveRange(range), cursor, limit, allowed)
+  }
+
+  async searchTransactions(userId: string, workspaceId: string, range: SnapshotRange, query: string, cursor?: string, limit = 20, accountId?: string | null): Promise<TransactionPage> {
+    const allowed = new Set(this.accessibleAccounts(userId).filter((item) => item.workspaceId === workspaceId && !item.archivedAt).map((item) => item.id))
+    if (accountId) {
+      if (!allowed.has(accountId)) throw forbidden('Нет доступа к этому кошельку')
+      return this.pageFor(workspaceId, resolveRange(range), cursor, limit, new Set([accountId]), query)
+    }
+    if (!allowed.size) throw forbidden('Нет доступа к этому пространству')
+    return this.pageFor(workspaceId, resolveRange(range), cursor, limit, allowed, query)
   }
 
   async issueQuickKey(userId: string) {
@@ -740,14 +787,18 @@ export class MemoryFinanceStore implements FinanceStore {
     const categoryIds = new Set((this.categories.get(workspaceId) || []).map((item) => item.id))
     if (!accountIds.has(input.accountId) || (input.targetAccountId && !accountIds.has(input.targetAccountId)) || (input.categoryId && !categoryIds.has(input.categoryId))) throw forbidden('Связанный объект принадлежит другому пространству')
   }
-  private pageFor(workspaceId: string, range: { start: Date; end: Date }, rawCursor?: string, requestedLimit = 20, scopedAccountIds?: Set<string>): TransactionPage {
+  private pageFor(workspaceId: string, range: { start: Date; end: Date }, rawCursor?: string, requestedLimit = 20, scopedAccountIds?: Set<string>, searchQuery?: string): TransactionPage {
     const cursor = decodeTransactionCursor(rawCursor)
     const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)))
+    const needle = normalizeSearch(searchQuery || '')
+    const categoryNames = new Map((this.categories.get(workspaceId) || []).map((item) => [item.id, item.name]))
+    const accountNames = new Map((this.accounts.get(workspaceId) || []).map((item) => [item.id, item.name]))
     const ordered = (this.transactions.get(workspaceId) || [])
       .filter((item) => {
         if (scopedAccountIds && !scopedAccountIds.has(item.accountId) && !(item.targetAccountId && scopedAccountIds.has(item.targetAccountId))) return false
         const at = new Date(item.occurredAt)
         if (at < range.start || at > range.end) return false
+        if (needle && !transactionMatchesSearch(item, needle, categoryNames, accountNames)) return false
         return !cursor || item.occurredAt < cursor.occurredAt || (item.occurredAt === cursor.occurredAt && item.id < cursor.id)
       })
       .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt) || right.id.localeCompare(left.id))

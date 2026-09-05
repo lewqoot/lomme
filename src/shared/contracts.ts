@@ -38,6 +38,10 @@ export const transactionPageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 })
 
+export const transactionSearchQuerySchema = transactionPageQuerySchema.extend({
+  query: z.string().trim().min(1).max(120),
+})
+
 const transactionBaseSchema = z.object({
   workspaceId: uuidSchema,
   type: transactionTypeSchema,

@@ -273,6 +273,15 @@ export class PostgresFinanceStore implements FinanceStore {
     return this.transactionPageRows(workspaceId, resolveRange(range), cursor, limit, scope)
   }
 
+  async searchTransactions(userId: string, workspaceId: string, range: SnapshotRange, query: string, cursor?: string, limit = 20, accountId?: string | null): Promise<TransactionPage> {
+    const result = await this.pool.query(`SELECT a.id FROM account_members am JOIN accounts a ON a.id=am.account_id WHERE am.user_id=$1 AND a.workspace_id=$2 AND a.archived_at IS NULL`, [userId, workspaceId])
+    const allowed = result.rows.map((row) => row.id as string)
+    if (accountId && !allowed.includes(accountId)) throw forbidden('Нет доступа к этому кошельку')
+    const scope = accountId ? [accountId] : allowed
+    if (!scope.length) throw forbidden('Нет доступа к этому пространству')
+    return this.transactionPageRows(workspaceId, resolveRange(range), cursor, limit, scope, query)
+  }
+
   async issueQuickKey(userId: string) {
     const { key, hash } = issueQuickKey()
     await this.pool.query('UPDATE users SET quick_key_hash=$1, quick_key_issued_at=now() WHERE id=$2', [hash, userId])
@@ -874,7 +883,7 @@ export class PostgresFinanceStore implements FinanceStore {
   }
   async close() { await this.pool.end() }
 
-  private async transactionPageRows(workspaceId: string, range: { start: Date; end: Date }, rawCursor?: string, requestedLimit = 20, accountIds?: string[]): Promise<TransactionPage> {
+  private async transactionPageRows(workspaceId: string, range: { start: Date; end: Date }, rawCursor?: string, requestedLimit = 20, accountIds?: string[], searchQuery?: string): Promise<TransactionPage> {
     const cursor = decodeTransactionCursor(rawCursor)
     const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)))
     const values: unknown[] = [workspaceId, range.start, range.end, accountIds || []]
@@ -882,12 +891,29 @@ export class PostgresFinanceStore implements FinanceStore {
       ? `AND (t.occurred_at < $5 OR (t.occurred_at = $5 AND t.id < $6::uuid))`
       : ''
     if (cursor) values.push(cursor.occurredAt, cursor.id)
+    const needle = searchQuery
+      ?.toLocaleLowerCase('ru')
+      .replaceAll('ё', 'е')
+      .replace(/[\u00a0\u202f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const searchIndex = needle ? values.push(needle) : 0
+    const search = needle ? `AND (strpos(replace(lower(concat_ws(' ',
+      COALESCE(t.note,''),COALESCE(c.name,''),COALESCE(source_account.name,''),COALESCE(target_account.name,''),
+      CASE t.type WHEN 'expense' THEN 'расход трата' WHEN 'income' THEN 'доход пополнение' ELSE 'перевод' END,
+      trim(to_char(t.amount_kopecks::numeric / 100,'FM999999999990D99')),
+      to_char(t.occurred_at,'YYYY-MM-DD'),to_char(t.occurred_at,'DD.MM.YYYY')
+    )),'ё','е'),$${searchIndex})>0
+      OR strpos(replace(trim(to_char(t.amount_kopecks::numeric / 100,'FM999999999990D99')),'.',','),replace(replace($${searchIndex},' ',''),'.',','))>0)` : ''
     values.push(limit + 1)
     const limitIndex = values.length
     const result = await this.pool.query(`SELECT t.*,COALESCE(u.first_name,'Удалённый участник') AS author_name
       FROM transactions t LEFT JOIN users u ON u.id=t.created_by_user_id
+      LEFT JOIN categories c ON c.id=t.category_id
+      LEFT JOIN accounts source_account ON source_account.id=t.account_id
+      LEFT JOIN accounts target_account ON target_account.id=t.target_account_id
       WHERE t.workspace_id=$1 AND t.deleted_at IS NULL AND t.occurred_at BETWEEN $2 AND $3
-        AND (cardinality($4::uuid[])=0 OR t.account_id=ANY($4::uuid[]) OR t.target_account_id=ANY($4::uuid[])) ${after}
+        AND (cardinality($4::uuid[])=0 OR t.account_id=ANY($4::uuid[]) OR t.target_account_id=ANY($4::uuid[])) ${after} ${search}
       ORDER BY t.occurred_at DESC,t.id DESC LIMIT $${limitIndex}`, values)
     const items = result.rows.slice(0, limit).map(transactionRow)
     const last = items.at(-1)

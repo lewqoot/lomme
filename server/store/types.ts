@@ -116,6 +116,7 @@ export interface FinanceStore {
   revokeSession(token: string): Promise<void>
   snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, accountId?: string | null): Promise<AppSnapshot>
   transactionsPage(userId: string, workspaceId: string, range: SnapshotRange, cursor?: string, limit?: number, accountId?: string | null): Promise<TransactionPage>
+  searchTransactions(userId: string, workspaceId: string, range: SnapshotRange, query: string, cursor?: string, limit?: number, accountId?: string | null): Promise<TransactionPage>
   createTransaction(userId: string, input: TransactionInput, idempotencyKey: string): Promise<{ id: string }>
   /** Issues a fresh shortcut key, replacing any previous one. Returns it once. */
   issueQuickKey(userId: string): Promise<{ key: string }>

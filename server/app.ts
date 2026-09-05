@@ -22,6 +22,7 @@ import {
   reminderSettingsSchema,
   reorderCategoriesSchema,
   transactionPageQuerySchema,
+  transactionSearchQuerySchema,
   updateAccountSchema,
   updateCategorySchema,
   updateTransactionSchema,
@@ -296,6 +297,11 @@ export async function buildApp(store: FinanceStore) {
   app.get('/api/v1/transactions', { preHandler: requireUser }, async (request) => {
     const query = parse(transactionPageQuerySchema, request.query)
     return store.transactionsPage(request.currentUser!.id, query.workspaceId, { start: query.start, end: query.end }, query.cursor, query.limit, query.accountId)
+  })
+
+  app.get('/api/v1/transactions/search', { preHandler: requireUser }, async (request) => {
+    const query = parse(transactionSearchQuerySchema, request.query)
+    return store.searchTransactions(request.currentUser!.id, query.workspaceId, { start: query.start, end: query.end }, query.query, query.cursor, query.limit, query.accountId)
   })
 
   app.post('/api/v1/transactions', { preHandler: requireUser }, async (request, reply) => {

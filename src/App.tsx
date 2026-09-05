@@ -287,7 +287,7 @@ export default function App() {
       onShare={(text) => { void navigator.clipboard?.writeText(text); haptic('success'); setToast({ text: 'Сводка скопирована' }) }}
     />}
     {navigation.page === 'accounts' && <AccountsPage data={data} workspace={activeWorkspace} onSelect={async (nextWorkspaceId, nextAccountId) => { await selectAccount(nextWorkspaceId, nextAccountId); goBack() }} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
-    {navigation.page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} onEdit={(editor) => dispatchNavigation({ type: 'open-editor', editor: { mode: 'edit', transaction: editor } })} onClose={goBack} periodLabel={range.label} />}
+    {navigation.page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} onEdit={(editor) => dispatchNavigation({ type: 'open-editor', editor: { mode: 'edit', transaction: editor } })} onClose={goBack} periodLabel={range.label} periodStart={range.start.toISOString()} periodEnd={range.end.toISOString()} />}
     {navigation.page === 'family' && <FamilyPage data={data} onSelect={selectAccount} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
     {navigation.page === 'settings' && <SettingsPage backRef={settingsBackRef} notify={(text) => setToast({ text })} onNavigate={navigate} onClose={goBack} initialScreen={settingsEntry} />}
     {navigation.page === 'categories' && <CategoriesPage data={data} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}

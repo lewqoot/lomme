@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { ArrowRightLeft, ChevronLeft, ReceiptText, ScanSearch, Search, X } from 'lucide-react'
 import { format, isSameDay, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import type { AppSnapshot, TransactionView } from '../../shared/contracts'
+import type { AppSnapshot, TransactionPage, TransactionView } from '../../shared/contracts'
+import { api } from '../../lib/api'
 import { tint } from '../../lib/palette'
-import { searchTransactions } from './model'
 import { DATA_COLORS } from '../../shared/design-tokens'
 
 type Props = {
@@ -12,18 +13,42 @@ type Props = {
   glyph(icon?: string): ReactNode
   onEdit(transaction: TransactionView): void
   onClose(): void
-  /** Search runs over the loaded window, so the screen has to name it. */
   periodLabel: string
+  periodStart: string
+  periodEnd: string
 }
 
-export function SearchPage({ data, glyph, onEdit, onClose, periodLabel }: Props) {
+export function SearchPage({ data, glyph, onEdit, onClose, periodLabel, periodStart, periodEnd }: Props) {
   const [query, setQuery] = useState('')
+  const [settledQuery, setSettledQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
     return () => cancelAnimationFrame(frame)
   }, [])
-  const results = useMemo(() => searchTransactions(data.transactions, data.categories, query), [data.categories, data.transactions, query])
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettledQuery(query.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [query])
+  const search = useInfiniteQuery({
+    queryKey: ['transaction-search', data.activeWorkspaceId, data.activeAccountId, periodStart, periodEnd, settledQuery],
+    enabled: settledQuery.length > 0,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        workspaceId: data.activeWorkspaceId,
+        start: periodStart,
+        end: periodEnd,
+        query: settledQuery,
+        limit: '20',
+      })
+      if (data.activeAccountId) params.set('accountId', data.activeAccountId)
+      if (pageParam) params.set('cursor', pageParam)
+      return api<TransactionPage>(`/transactions/search?${params}`)
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+  const results = useMemo(() => search.data?.pages.flatMap((page) => page.items) || [], [search.data])
   const grouped = useMemo(() => {
     const map = new Map<string, TransactionView[]>()
     for (const item of results) {
@@ -34,6 +59,7 @@ export function SearchPage({ data, glyph, onEdit, onClose, periodLabel }: Props)
   }, [results])
   const categories = new Map(data.categories.map((item) => [item.id, item]))
   const hasQuery = query.trim().length > 0
+  const waitingForQuery = hasQuery && query.trim() !== settledQuery
 
   return <div className="search-screen">
     <header className="search-page-header">
@@ -43,10 +69,12 @@ export function SearchPage({ data, glyph, onEdit, onClose, periodLabel }: Props)
     </header>
     <p className="search-period-note">Ищем в периоде: {periodLabel}</p>
 
-    {!hasQuery && <SearchState icon={<ScanSearch />} text="Ищите по названию счёта, названию категории, заметке, сумме, типу операции или периоду повтора, например еженедельно или ежемесячно." />}
-    {hasQuery && !results.length && <SearchState icon={<ReceiptText />} title="Ничего не найдено" text="Проверьте запрос или попробуйте другую дату." />}
-    {hasQuery && results.length > 0 && <section className="search-results" aria-live="polite">
-      <p className="search-result-count">{results.length} {plural(results.length, 'операция', 'операции', 'операций')}</p>
+    {!hasQuery && <SearchState icon={<ScanSearch />} text="Ищите по счёту, категории, заметке, сумме, типу или дате операции." />}
+    {hasQuery && (waitingForQuery || search.isLoading) && <SearchState icon={<ScanSearch />} text="Ищем во всём выбранном периоде…" />}
+    {hasQuery && !waitingForQuery && search.isError && <SearchState icon={<ReceiptText />} title="Поиск недоступен" text="Попробуйте ещё раз." />}
+    {hasQuery && !waitingForQuery && search.isSuccess && !results.length && <SearchState icon={<ReceiptText />} title="Ничего не найдено" text="Проверьте запрос или измените выбранный период." />}
+    {hasQuery && !waitingForQuery && results.length > 0 && <section className="search-results" aria-live="polite">
+      <p className="search-result-count">Показано: {results.length} {plural(results.length, 'операция', 'операции', 'операций')}</p>
       {grouped.map(([date, items]) => <div className="search-day" key={date}>
         <h2>{dayTitle(parseISO(date))}{isSameDay(parseISO(date), new Date()) ? ' — Сегодня' : ''}</h2>
         <div className="operation-list">{items.map((item) => {
@@ -56,8 +84,9 @@ export function SearchPage({ data, glyph, onEdit, onClose, periodLabel }: Props)
             <span className="operation-copy"><strong>{category?.name || (item.type === 'transfer' ? 'Перевод' : 'Без категории')}</strong>{item.note && <small>{item.note}</small>}</span>
             <strong className={item.type}>{item.type === 'income' ? '+' : item.type === 'expense' ? '−' : ''}{money(item.amountKopecks)}</strong>
           </button>
-        })}</div>
+      })}</div>
       </div>)}
+      {search.hasNextPage && <div className="load-more-row"><button className="secondary-button" type="button" disabled={search.isFetchingNextPage} onClick={() => void search.fetchNextPage()}>{search.isFetchingNextPage ? 'Загружаем' : 'Показать ещё'}</button></div>}
     </section>}
     <label className="operation-search-field">
       <Search />
