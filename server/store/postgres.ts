@@ -884,16 +884,20 @@ export class PostgresFinanceStore implements FinanceStore {
     if (cursor) values.push(cursor.occurredAt, cursor.id)
     values.push(limit + 1)
     const limitIndex = values.length
-    const result = await this.pool.query(`SELECT t.*,COALESCE(u.first_name,'Удалённый участник') AS author_name
+    const result = await this.pool.query(`SELECT t.*,
+        to_char(t.occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_occurred_at,
+        COALESCE(u.first_name,'Удалённый участник') AS author_name
       FROM transactions t LEFT JOIN users u ON u.id=t.created_by_user_id
       WHERE t.workspace_id=$1 AND t.deleted_at IS NULL AND t.occurred_at BETWEEN $2 AND $3
         AND (cardinality($4::uuid[])=0 OR t.account_id=ANY($4::uuid[]) OR t.target_account_id=ANY($4::uuid[])) ${after}
       ORDER BY t.occurred_at DESC,t.id DESC LIMIT $${limitIndex}`, values)
     const items = result.rows.slice(0, limit).map(transactionRow)
-    const last = items.at(-1)
+    const last = result.rows.at(Math.min(limit, result.rows.length) - 1)
     return {
       items,
-      nextCursor: result.rows.length > limit && last ? encodeTransactionCursor({ occurredAt: last.occurredAt, id: last.id }) : null,
+      nextCursor: result.rows.length > limit && last
+        ? encodeTransactionCursor({ occurredAt: last.cursor_occurred_at as string, id: last.id as string })
+        : null,
     }
   }
 
