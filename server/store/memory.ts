@@ -381,7 +381,16 @@ export class MemoryFinanceStore implements FinanceStore {
     invite.usedByUserId = userId
     user.activeWorkspaceId = account.workspaceId
     user.activeAccountId = account.id
-    return { workspaceId: account.workspaceId, accountId: account.id }
+    const inviter = this.users.get(invite.createdByUserId)
+    return {
+      workspaceId: account.workspaceId,
+      accountId: account.id,
+      joined: {
+        inviterTelegramUserId: inviter?.botWriteAccess ? inviter.telegramUserId : null,
+        accountName: account.name,
+        memberName: user.firstName,
+      },
+    }
   }
 
   async revokeAccountInvite(userId: string, accountId: string, inviteId: string) {

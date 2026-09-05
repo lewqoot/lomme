@@ -227,6 +227,11 @@ export function accountInvite(accountName: string, inviteUrl: string): BotMessag
   }
 }
 
+/** Told to the person who sent the invite, once it is actually used. */
+export function accountInviteAccepted(memberName: string, accountName: string): BotMessage {
+  return { text: `🤝 ${memberName} присоединился к кошельку «${accountName}»` }
+}
+
 export function accountInviteExpired(): BotMessage {
   return {
     text: [

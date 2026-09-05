@@ -418,7 +418,25 @@ export class PostgresFinanceStore implements FinanceStore {
       await client.query(`UPDATE account_invites SET used_at=now(),used_by_user_id=$2 WHERE id=$1`, [invite.id, userId])
       await client.query(`UPDATE users SET active_workspace_id=$2,active_account_id=$3,updated_at=now() WHERE id=$1`, [userId, invite.workspace_id, invite.account_id])
       await this.audit(client, invite.workspace_id, userId, 'account_invite', invite.id, 'accept', { accountId: invite.account_id })
-      await client.query('COMMIT'); return { workspaceId: invite.workspace_id as string, accountId: invite.account_id as string }
+      // Read inside the transaction so the notification cannot describe a state
+      // the commit then rolls back.
+      const joined = await client.query(
+        `SELECT inviter.telegram_user_id, inviter.bot_write_access, account.name AS account_name, member.first_name AS member_name
+           FROM accounts account
+           JOIN users inviter ON inviter.id=$2
+           JOIN users member ON member.id=$3
+          WHERE account.id=$1`, [invite.account_id, invite.created_by_user_id, userId])
+      const row = joined.rows[0]
+      await client.query('COMMIT')
+      return {
+        workspaceId: invite.workspace_id as string,
+        accountId: invite.account_id as string,
+        joined: row ? {
+          inviterTelegramUserId: row.bot_write_access ? Number(row.telegram_user_id) : null,
+          accountName: row.account_name as string,
+          memberName: row.member_name as string,
+        } : undefined,
+      }
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
   }
 

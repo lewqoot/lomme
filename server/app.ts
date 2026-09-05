@@ -29,6 +29,7 @@ import {
 import { parseQuickAmount, splitQuickInput } from '../src/shared/quick-entry.js'
 import { telegramStartParam, validateTelegramInitData, type TelegramIdentity } from './auth/telegram.js'
 import { answerCallbackQuery, sendMessage } from './telegram/api.js'
+import { accountInviteAccepted } from './telegram/texts.js'
 import { routeUpdate, type TelegramUpdate } from './telegram/router.js'
 import { AppError } from './lib/errors.js'
 import { ensureSameOrigin } from './lib/security.js'
@@ -272,7 +273,17 @@ export async function buildApp(store: FinanceStore) {
     return reply.code(201).send({ ...invite, url })
   })
   app.post('/api/v1/account-invites/preview', { preHandler: requireUser }, async (request) => { const { token } = parse(inviteTokenSchema, request.body); return store.previewAccountInvite(request.currentUser!.id, token) })
-  app.post('/api/v1/account-invites/accept', { preHandler: requireUser }, async (request) => { const { token } = parse(inviteTokenSchema, request.body); return store.acceptAccountInvite(request.currentUser!.id, token) })
+  app.post('/api/v1/account-invites/accept', { preHandler: requireUser }, async (request) => {
+    const { token } = parse(inviteTokenSchema, request.body)
+    const result = await store.acceptAccountInvite(request.currentUser!.id, token)
+    // Telling the inviter is a courtesy, not part of joining: a failure here
+    // must not turn a successful acceptance into an error.
+    if (result.joined?.inviterTelegramUserId) {
+      const outcome = await sendMessage(result.joined.inviterTelegramUserId, accountInviteAccepted(result.joined.memberName, result.joined.accountName))
+      if (!outcome.ok) request.log.warn({ event: 'telegram_join_notice_failed', description: outcome.description }, 'Join notice failed')
+    }
+    return { workspaceId: result.workspaceId, accountId: result.accountId }
+  })
   app.delete('/api/v1/accounts/:id/invites/:inviteId', { preHandler: requireUser }, async (request, reply) => { const params = request.params as { id: string; inviteId: string }; parse(uuidSchema, params.id); parse(uuidSchema, params.inviteId); await store.revokeAccountInvite(request.currentUser!.id, params.id, params.inviteId); return reply.code(204).send() })
   app.delete('/api/v1/accounts/:id/members/:memberId', { preHandler: requireUser }, async (request, reply) => { const params = request.params as { id: string; memberId: string }; parse(uuidSchema, params.id); parse(uuidSchema, params.memberId); await store.removeAccountMember(request.currentUser!.id, params.id, params.memberId); return reply.code(204).send() })
   app.post('/api/v1/accounts/:id/leave', { preHandler: requireUser }, async (request, reply) => { const { id } = parseId(request.params); await store.leaveAccount(request.currentUser!.id, id); return reply.code(204).send() })

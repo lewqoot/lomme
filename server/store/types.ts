@@ -43,6 +43,17 @@ export type QuickEntryResult = {
   amountKopecks: number
 }
 
+/**
+ * `joined` is present only the first time an invite is accepted, and carries
+ * what the bot needs to tell the person who sent it. A second acceptance of
+ * the same link is idempotent and silent.
+ */
+export type AcceptedInvite = {
+  workspaceId: string
+  accountId: string
+  joined?: { inviterTelegramUserId: number | null; accountName: string; memberName: string }
+}
+
 export type SessionUser = {
   id: string
   firstName: string
@@ -90,7 +101,7 @@ export interface FinanceStore {
   setActiveAccount(userId: string, input: ActiveAccountInput): Promise<void>
   createAccountInvite(userId: string, accountId: string): Promise<{ id: string; token: string; expiresAt: string }>
   previewAccountInvite(userId: string, token: string): Promise<AccountInvitePreview>
-  acceptAccountInvite(userId: string, token: string): Promise<{ workspaceId: string; accountId: string }>
+  acceptAccountInvite(userId: string, token: string): Promise<AcceptedInvite>
   revokeAccountInvite(userId: string, accountId: string, inviteId: string): Promise<void>
   removeAccountMember(userId: string, accountId: string, memberUserId: string): Promise<void>
   leaveAccount(userId: string, accountId: string): Promise<void>

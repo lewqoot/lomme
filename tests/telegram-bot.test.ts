@@ -286,6 +286,50 @@ describe('bot webhook', () => {
     expect(sent[0]).toContain('ещё не открывал приложение')
   })
 
+  it('сообщает пригласившему, что к кошельку присоединились', async () => {
+    const sent: Array<{ chatId: number; text: string }> = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/getMe')) return new Response(JSON.stringify({ ok: true, result: { is_bot: true, username: 'lomme_test_bot' } }), { status: 200, headers: { 'content-type': 'application/json' } })
+      const body = JSON.parse(String(init?.body)) as { chat_id: number; text: string }
+      sent.push({ chatId: body.chat_id, text: body.text })
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    // Пригласивший разрешил боту писать, приглашённый — нет.
+    const owner = await store.createSession({ id: 111, firstName: 'Алекс', lastName: null, username: 'alex', languageCode: 'ru', allowsWriteToPm: true }, 'Europe/Moscow')
+    const guest = await store.createSession({ id: 222, firstName: 'Ирина', lastName: null, username: 'irina', languageCode: 'ru' }, 'Europe/Moscow')
+    const snapshot = await store.snapshot(owner.user.id)
+    const invite = await store.createAccountInvite(owner.user.id, snapshot.activeAccountId!)
+
+    const response = await app.inject({
+      method: 'POST', url: '/api/v1/account-invites/accept',
+      headers: { cookie: `lomme_session=${guest.token}` },
+      payload: { token: invite.token },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(sent).toEqual([{ chatId: 111, text: '🤝 Ирина присоединился к кошельку «Кошелёк»' }])
+  })
+
+  it('молчит, если пригласивший не разрешал боту писать', async () => {
+    const sent: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/sendMessage')) sent.push(JSON.parse(String(init?.body)).text as string)
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    const owner = await store.createSession({ id: 333, firstName: 'Алекс', lastName: null, username: 'alex', languageCode: 'ru' }, 'Europe/Moscow')
+    const guest = await store.createSession({ id: 444, firstName: 'Ирина', lastName: null, username: 'irina', languageCode: 'ru' }, 'Europe/Moscow')
+    const snapshot = await store.snapshot(owner.user.id)
+    const invite = await store.createAccountInvite(owner.user.id, snapshot.activeAccountId!)
+
+    await app.inject({
+      method: 'POST', url: '/api/v1/account-invites/accept',
+      headers: { cookie: `lomme_session=${guest.token}` },
+      payload: { token: invite.token },
+    })
+
+    expect(sent).toHaveLength(0)
+  })
+
   it('прячет вебхук за секретом', async () => {
     const response = await app.inject({
       method: 'POST', url: '/api/v1/telegram/webhook/wrong-secret', payload: { update_id: 14 },
