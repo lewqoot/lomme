@@ -5,7 +5,8 @@ import compress from '@fastify/compress'
 import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
-import Fastify, { type FastifyRequest } from 'fastify'
+import { timingSafeEqual } from 'node:crypto'
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify'
 import { ZodError, type ZodType } from 'zod'
 import {
   accountInviteSchema,
@@ -93,6 +94,9 @@ export function shortcutErrorText(code: string) {
  * (APP_URL is http there) gets messages without the open-app button instead of
  * a rejected send.
  */
+/** Matches the deprecated webhook route, whose path contains the secret. */
+const WEBHOOK_PATH_SECRET = /^\/api\/v1\/telegram\/webhook\/[^/?]+/
+
 function telegramWebAppUrl() {
   const value = process.env.APP_URL?.trim()
   return value && value.startsWith('https://') ? value : null
@@ -107,7 +111,37 @@ export async function buildApp(store: FinanceStore) {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEV_AUTH === 'true') {
     throw new Error('ALLOW_DEV_AUTH must be disabled in production')
   }
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info', redact: ['req.headers.cookie', 'req.headers.authorization', 'req.body.note', 'req.body.text', 'req.body.token', 'req.body.initData', 'req.body.entries.*.note'] }, trustProxy: true })
+  const app = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL || 'info',
+      redact: [
+        'req.headers.cookie',
+        'req.headers.authorization',
+        // Telegram's proof that an update is genuine. Logging it would hand
+        // anyone with log access the ability to forge updates.
+        'req.headers["x-telegram-bot-api-secret-token"]',
+        'req.body.note',
+        'req.body.text',
+        'req.body.token',
+        'req.body.initData',
+        'req.body.entries.*.note',
+      ],
+      serializers: {
+        req(request) {
+          return {
+            method: request.method,
+            // The deprecated webhook route carries the same secret in its path,
+            // so the logged url is the route, never the request's own.
+            url: WEBHOOK_PATH_SECRET.test(request.url) ? '/api/v1/telegram/webhook/[secret]' : request.url,
+            host: request.headers.host,
+            remoteAddress: request.socket?.remoteAddress,
+            remotePort: request.socket?.remotePort,
+          }
+        },
+      },
+    },
+    trustProxy: true,
+  })
   let verifiedBotUsername: string | null = null
   const inviteBotUsername = async () => {
     if (verifiedBotUsername) return verifiedBotUsername
@@ -184,9 +218,18 @@ export async function buildApp(store: FinanceStore) {
     request.currentUser = user
   }
 
+  // Liveness: the process is up. Kept trivial on purpose — a restart is never
+  // the right answer to a database that is merely slow.
   app.get('/healthz', async (_request, reply) => {
     const state = await store.health()
     return reply.send({ ok: true, service: 'lomme', ...state, now: new Date().toISOString() })
+  })
+
+  // Readiness: this build may serve traffic. Answers 503 while the schema is
+  // behind, so a deploy whose migration step failed cannot be reported green.
+  app.get('/readyz', async (_request, reply) => {
+    const state = await store.readiness()
+    return reply.code(state.ready ? 200 : 503).send({ ...state, service: 'lomme', now: new Date().toISOString() })
   })
 
   // Keep the tap on a normal same-origin HTTPS link so Telegram's iOS WebView
@@ -406,9 +449,28 @@ export async function buildApp(store: FinanceStore) {
       `✅ Записано ${sum} ₽\n${result.categoryName ?? 'Без категории'}`)
   })
 
-  app.post('/api/v1/telegram/webhook/:secret', async (request, reply) => {
-    const secret = (request.params as { secret: string }).secret
-    if (!process.env.TELEGRAM_WEBHOOK_SECRET || secret !== process.env.TELEGRAM_WEBHOOK_SECRET) throw new AppError(404, 'NOT_FOUND', 'Не найдено')
+  /**
+   * Telegram's own way of proving an update came from Telegram: a header it
+   * sends on every delivery, compared in constant time.
+   *
+   * The old scheme put the same secret in the URL path, where Fastify writes
+   * it into the access log of every request — and anyone who can read that log
+   * can forge an update carrying somebody else's Telegram user id. The path
+   * route stays for now so updates are not lost between this deploy and the
+   * setWebhook call that moves the secret into the header; it is removed once
+   * the header is confirmed live.
+   */
+  const webhookSecretMatches = (request: FastifyRequest, pathSecret?: string) => {
+    const expected = process.env.TELEGRAM_WEBHOOK_SECRET?.trim()
+    if (!expected) return false
+    const provided = request.headers['x-telegram-bot-api-secret-token']
+    const candidate = typeof provided === 'string' ? provided : pathSecret
+    if (!candidate || candidate.length !== expected.length) return false
+    return timingSafeEqual(Buffer.from(candidate), Buffer.from(expected))
+  }
+
+  const handleWebhook = async (request: FastifyRequest, reply: FastifyReply, pathSecret?: string) => {
+    if (!webhookSecretMatches(request, pathSecret)) throw new AppError(404, 'NOT_FOUND', 'Не найдено')
     const update = request.body as TelegramUpdate
     request.log.info({ event: 'telegram_update_received', updateId: update.update_id })
 
@@ -475,7 +537,12 @@ export async function buildApp(store: FinanceStore) {
       }
     }
     return reply.send({ ok: true })
-  })
+  }
+
+  app.post('/api/v1/telegram/webhook', async (request, reply) => handleWebhook(request, reply))
+  // Deprecated: kept only until the webhook is re-registered with a header.
+  app.post('/api/v1/telegram/webhook/:secret', async (request, reply) =>
+    handleWebhook(request, reply, (request.params as { secret?: string }).secret))
 
   app.setErrorHandler((error, request, reply) => {
     const isShortcutGet = request.method === 'GET'
