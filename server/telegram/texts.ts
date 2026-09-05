@@ -48,7 +48,7 @@ export function money(amountKopecks: number) {
 export function welcome(links: LinkContext): BotMessage {
   return {
     text: [
-      '👋 Привет! Я Lomme.',
+      '🙂 Привет! Я Lomme.',
       '',
       'Записываю траты и показываю, куда на самом деле уходят деньги. Никаких таблиц.',
       '',
@@ -59,7 +59,7 @@ export function welcome(links: LinkContext): BotMessage {
     ].join('\n'),
     keyboard: [
       ...openApp(links),
-      screenLink(links, 'shortcut', '⚡ Записывать с экрана блокировки'),
+      screenLink(links, 'shortcut', '⚡️ Записывать с экрана блокировки'),
       screenLink(links, 'notifications', '🔔 Напоминания'),
       [HELP_BUTTON],
     ].filter((row) => row.length),
@@ -68,7 +68,7 @@ export function welcome(links: LinkContext): BotMessage {
 
 export function welcomeBack(links: LinkContext): BotMessage {
   return {
-    text: 'С возвращением 👋\n\nНапиши трату сюда или открой приложение.',
+    text: '🙂 С возвращением\n\nНапиши трату сюда или открой приложение.',
     keyboard: openApp(links),
   }
 }
@@ -90,7 +90,7 @@ export function help(links: LinkContext): BotMessage {
       '',
       'Аналитика, кошельки и категории — тоже в приложении.',
     ].join('\n'),
-    keyboard: [...openApp(links), screenLink(links, 'shortcut', '⚡ Настроить шорткат')].filter((row) => row.length),
+    keyboard: [...openApp(links), screenLink(links, 'shortcut', '⚡️ Настроить шорткат')].filter((row) => row.length),
   }
 }
 
@@ -108,7 +108,7 @@ function entryButtons(transactionId: string, offerCategory: boolean): InlineKeyb
 /** The category was chosen outright: the name is a statement, not a question. */
 export function recorded(amountKopecks: number, categoryName: string, transactionId: string): BotMessage {
   return {
-    text: `✅ Записано ${money(amountKopecks)}\n${categoryName}`,
+    text: `✔️ Записано ${money(amountKopecks)}\n${categoryName}`,
     keyboard: entryButtons(transactionId, true),
   }
 }
@@ -119,14 +119,14 @@ export function recorded(amountKopecks: number, categoryName: string, transactio
  */
 export function recordedGuess(amountKopecks: number, categoryName: string, transactionId: string): BotMessage {
   return {
-    text: `✅ Записано ${money(amountKopecks)}\n${categoryName} — если не туда, поправь`,
+    text: `✔️ Записано ${money(amountKopecks)}\n${categoryName} — если не туда, поправь`,
     keyboard: entryButtons(transactionId, true),
   }
 }
 
 export function recordedWithoutCategory(amountKopecks: number, transactionId: string): BotMessage {
   return {
-    text: `✅ Записано ${money(amountKopecks)}\nБез категории`,
+    text: `✔️ Записано ${money(amountKopecks)}\nБез категории`,
     keyboard: [[
       { text: 'Выбрать категорию', callback_data: `cat:${transactionId}` },
       { text: 'Удалить', callback_data: `del:${transactionId}` },
@@ -154,7 +154,7 @@ export function chooseCategory(transactionId: string, categories: Array<{ id: st
 
 /** After a correction: says what changed, and what was learned from it. */
 export function categoryCorrected(amountKopecks: number, categoryName: string, keyword: string | null): BotMessage {
-  const lines = [`✅ ${money(amountKopecks)} → ${categoryName}`]
+  const lines = [`✔️ ${money(amountKopecks)} → ${categoryName}`]
   if (keyword) lines.push('', `Запомнил: «${keyword}» теперь идёт сюда.`)
   return { text: lines.join('\n') }
 }
@@ -175,16 +175,16 @@ export function entryGone(): BotMessage {
  */
 export function notRecorded(reason: QuickRejection): BotMessage {
   if (reason === 'grouping') {
-    return { text: ['🤔 Не понял сумму', '', 'Разряды пиши пробелом: 1 234,56 продукты'].join('\n') }
+    return { text: ['❓ Не понял сумму', '', 'Разряды пиши пробелом: 1 234,56 продукты'].join('\n') }
   }
   if (reason === 'several-amounts') {
-    return { text: ['🤔 В строке два числа', '', 'Оставь одно: 1250 такси'].join('\n') }
+    return { text: ['❓ В строке два числа', '', 'Оставь одно: 1250 такси'].join('\n') }
   }
   if (reason === 'arithmetic') {
-    return { text: ['🤔 Считать пока не умею', '', 'Напиши итог: 500 такси'].join('\n') }
+    return { text: ['❓ Считать пока не умею', '', 'Напиши итог: 500 такси'].join('\n') }
   }
   if (reason === 'shorthand') {
-    return { text: ['🤔 Не понял сокращение', '', 'Напиши сумму полностью: 1000 продукты'].join('\n') }
+    return { text: ['❓ Не понял сокращение', '', 'Напиши сумму полностью: 1000 продукты'].join('\n') }
   }
   if (reason === 'income') {
     return {
@@ -195,7 +195,7 @@ export function notRecorded(reason: QuickRejection): BotMessage {
       ].join('\n'),
     }
   }
-  return { text: '🤔 Не нашёл сумму\n\nНапиши так: 450 кофе или кофе 450' }
+  return { text: '❓ Не нашёл сумму\n\nНапиши так: 450 кофе или кофе 450' }
 }
 
 /** Written for someone who pressed the microphone because other bots take voice. */
@@ -326,7 +326,7 @@ export function reactivation(kind: 'start-day1' | 'start-day3' | 'return' | 'tip
   if (kind === 'return') {
     return {
       text: [
-        'Давно тебя не было 👋',
+        '👀 Давно тебя не было',
         '',
         'За неделю ничего не записалось. Если хочешь, начнём с сегодняшнего дня — просто напиши трату.',
       ].join('\n'),

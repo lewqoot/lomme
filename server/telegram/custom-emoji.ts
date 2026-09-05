@@ -1,5 +1,5 @@
 /**
- * Animated emoji for the first character of a message.
+ * Animated emoji used by the bot in messages and inline buttons.
  *
  * Telegram renders a `custom_emoji` entity as the animated sticker for anyone
  * with Premium and falls back to the ordinary character underneath for
@@ -11,20 +11,20 @@
  * replaced, every id here has to be re-read, which is why they live in one
  * file rather than being sprinkled through the texts.
  *
- * Only the leading emoji of a message is decorated. A heading earns the
- * animation; an emoji inside a sentence would just be noise, and the entity
- * offsets would have to be computed against the whole string.
- *
- * The ✅ that confirms a recorded expense is deliberately absent: those arrive
- * many times a day and match the shortcut's own reply, which cannot animate
- * anything. Matching the two matters more than decorating one of them.
+ * The set does not contain exact twins for every emoji the first version used.
+ * Texts use the closest NewsEmoji alternative instead, so an emoji never falls
+ * back to the platform's standard artwork inside the bot chat.
  */
 
 /** Plain emoji → id of its animated twin in the set. */
 const ANIMATED: Readonly<Record<string, string>> = {
+  '👀': '5210956306952758910',
+  '🙂': '5461117441612462242',
   '📊': '5231200819986047254',
   '📈': '5244837092042750681',
   '📉': '5246762912428603768',
+  '✔️': '5206607081334906820',
+  '❓': '5436113877181941026',
   '🗓': '5413879192267805083',
   '🔔': '5458603043203327669',
   '🏠': '5416041192905265756',
@@ -40,20 +40,42 @@ const ANIMATED: Readonly<Record<string, string>> = {
 
 export type MessageEntity = { type: 'custom_emoji'; offset: number; length: number; custom_emoji_id: string }
 
+const EMOJI_LONGEST_FIRST = Object.keys(ANIMATED).sort((left, right) => right.length - left.length)
+
 /**
- * The entity for a message's leading emoji, if it has an animated twin.
+ * Entities for every NewsEmoji character in a message.
  *
  * `length` is measured in UTF-16 code units because that is what Telegram
- * counts — "📊".length is 2, and an emoji carrying a variation selector is 3.
+ * counts — "📊".length is 2, and "⚠️" is also 2 (symbol plus selector).
  * Reading it off the string itself avoids hand-counting each one wrong.
  */
-export function leadingEmojiEntities(text: string): MessageEntity[] {
-  // Longest key first, so "⚠️" (with its variation selector) is preferred over
-  // a bare "⚠" that happens to be a prefix of it.
-  for (const emoji of Object.keys(ANIMATED).sort((left, right) => right.length - left.length)) {
-    if (text.startsWith(emoji)) {
-      return [{ type: 'custom_emoji', offset: 0, length: emoji.length, custom_emoji_id: ANIMATED[emoji]! }]
+export function customEmojiEntities(text: string): MessageEntity[] {
+  const entities: MessageEntity[] = []
+
+  // String indexes are already UTF-16 offsets, which is exactly what Telegram
+  // expects. Moving by code point prevents us from stopping inside a surrogate
+  // pair when the current character is not one of ours.
+  for (let offset = 0; offset < text.length;) {
+    const emoji = EMOJI_LONGEST_FIRST.find((candidate) => text.startsWith(candidate, offset))
+    if (emoji) {
+      entities.push({ type: 'custom_emoji', offset, length: emoji.length, custom_emoji_id: ANIMATED[emoji]! })
+      offset += emoji.length
+      continue
     }
+    const codePoint = text.codePointAt(offset)
+    offset += codePoint !== undefined && codePoint > 0xFFFF ? 2 : 1
   }
-  return []
+
+  return entities
+}
+
+/**
+ * Telegram renders button custom emoji through a separate icon field. When a
+ * label starts with one of ours, remove the ordinary glyph and return the icon
+ * id that must be attached to the button.
+ */
+export function customEmojiButton(text: string): { text: string; customEmojiId: string | null } {
+  const emoji = EMOJI_LONGEST_FIRST.find((candidate) => text.startsWith(candidate))
+  if (!emoji) return { text, customEmojiId: null }
+  return { text: text.slice(emoji.length).trimStart(), customEmojiId: ANIMATED[emoji]! }
 }
