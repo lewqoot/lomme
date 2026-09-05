@@ -933,7 +933,26 @@ export class PostgresFinanceStore implements FinanceStore {
     if (!parent || parent.workspace_id !== workspaceId || parent.type !== type) throw conflict('Родительская категория должна быть того же типа')
     if (categoryId && result.rows.some((row) => row.id === categoryId)) throw conflict('Нельзя создать цикл категорий')
   }
-  private async validateRelations(queryable: Queryable, workspaceId: string, input: Pick<TransactionInput, 'accountId' | 'targetAccountId' | 'categoryId'>) { const accountIds = [input.accountId, input.targetAccountId].filter(Boolean); const accounts = await queryable.query(`SELECT id FROM accounts WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND archived_at IS NULL`, [workspaceId, accountIds]); if (accounts.rowCount !== accountIds.length) throw forbidden('Счёт принадлежит другому пространству или архивирован'); if (input.categoryId) { const category = await queryable.query(`SELECT id FROM categories WHERE workspace_id=$1 AND id=$2 AND archived_at IS NULL`, [workspaceId, input.categoryId]); if (!category.rowCount) throw forbidden('Категория принадлежит другому пространству или архивирована') } }
+  /**
+   * The relations a payload claims, checked against this workspace: accounts
+   * and category must belong to it and still be active, and a category must
+   * match the direction of the operation. An expense filed under an income
+   * category used to be accepted and then counted on the wrong side of every
+   * total that grouped by category.
+   */
+  private async validateRelations(queryable: Queryable, workspaceId: string, input: Pick<TransactionInput, 'type' | 'accountId' | 'targetAccountId' | 'categoryId'>) {
+    const accountIds = [input.accountId, input.targetAccountId].filter(Boolean)
+    const accounts = await queryable.query(
+      `SELECT id FROM accounts WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND archived_at IS NULL`, [workspaceId, accountIds])
+    if (accounts.rowCount !== accountIds.length) throw forbidden('Счёт принадлежит другому пространству или архивирован')
+    if (!input.categoryId) return
+    const category = await queryable.query(
+      `SELECT type FROM categories WHERE workspace_id=$1 AND id=$2 AND archived_at IS NULL`, [workspaceId, input.categoryId])
+    if (!category.rowCount) throw forbidden('Категория принадлежит другому пространству или архивирована')
+    if (input.type !== 'transfer' && category.rows[0].type !== input.type) {
+      throw forbidden(input.type === 'expense' ? 'Это категория доходов' : 'Это категория расходов')
+    }
+  }
   private async archiveEntity(userId: string, table: 'accounts' | 'categories', id: string, version: number) { const found = await this.pool.query(`SELECT workspace_id,version FROM ${table} WHERE id=$1 AND archived_at IS NULL`, [id]); if (!found.rowCount) throw notFound(); await this.assertWorkspaceOwner(this.pool, userId, found.rows[0].workspace_id); if (found.rows[0].version !== version) throw conflict(); await this.pool.query(`UPDATE ${table} SET archived_at=now(),updated_at=now(),version=version+1 WHERE id=$1`, [id]) }
   private async audit(client: PoolClient, workspaceId: string, userId: string, entityType: string, entityId: string, action: string, data: unknown) { await client.query(`INSERT INTO audit_log (workspace_id,actor_user_id,entity_type,entity_id,action,data) VALUES ($1,$2,$3,$4,$5,$6)`, [workspaceId, userId, entityType, entityId, action, JSON.stringify(data)]) }
 }

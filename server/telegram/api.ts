@@ -57,16 +57,40 @@ function isPermanent(status: number, description: string) {
   return status === 400 && /chat not found|user is deactivated|bot was blocked|message to edit not found|message can't be edited/i.test(description)
 }
 
+/**
+ * A request that never answers is worse than one that fails: without a
+ * deadline a single hung socket holds the webhook open until Telegram gives up
+ * on it, and in the worker it stalls every person queued behind it.
+ */
+const REQUEST_TIMEOUT_MS = 10_000
+
+/**
+ * Every call to Telegram, with transport failures turned into ordinary
+ * answers. A DNS failure, a reset connection or a timeout used to escape as a
+ * thrown exception — the webhook then returned 500 and the worker lost the
+ * rest of its batch, because neither had anything that looked like a result to
+ * act on.
+ */
 async function call<T>(method: string, payload: unknown): Promise<ApiResponse<T> & { status: number }> {
   const token = botToken()
   if (!token) return { ok: false, status: 0, description: 'TELEGRAM_BOT_TOKEN is not set' }
-  const response = await fetch(`${API_ORIGIN}/bot${token}/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const body = await response.json().catch(() => ({ ok: false })) as ApiResponse<T>
-  return { ...body, status: response.status }
+  try {
+    const response = await fetch(`${API_ORIGIN}/bot${token}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+    const body = await response.json().catch(() => ({ ok: false })) as ApiResponse<T>
+    return { ...body, status: response.status }
+  } catch (error) {
+    // Status 0 marks "never reached Telegram", which is always worth retrying:
+    // the message may not have been delivered, and it may not have been sent.
+    const description = error instanceof Error
+      ? (error.name === 'TimeoutError' ? `request timed out after ${REQUEST_TIMEOUT_MS} ms` : error.message)
+      : 'network failure'
+    return { ok: false, status: 0, description }
+  }
 }
 
 export async function sendMessage(chatId: number, message: BotMessage): Promise<SendOutcome> {

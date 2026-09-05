@@ -1,7 +1,14 @@
 import { z } from 'zod'
 import { DATA_COLORS } from './design-tokens.js'
 
-export const moneySchema = z.number().int().nonnegative().max(999_999_999_99)
+/**
+ * The largest amount any channel accepts, in kopecks — just under a billion
+ * roubles. Every path has to share it: the quick API used to have no ceiling
+ * at all and took 1 000 000 000 ₽, which the manual editor rejects.
+ */
+export const MAX_AMOUNT_KOPECKS = 999_999_999_99
+
+export const moneySchema = z.number().int().nonnegative().max(MAX_AMOUNT_KOPECKS)
 export const uuidSchema = z.string().uuid()
 export const iconKeySchema = z.string().trim().min(1).max(32)
 export const timeZoneSchema = z.string().trim().min(1).max(80).refine((timeZone) => {
@@ -43,15 +50,30 @@ const transactionBaseSchema = z.object({
   source: transactionSourceSchema.default('manual'),
 })
 
+/**
+ * The shape rules every channel shares. Only a transfer has a destination and
+ * only a non-transfer has a category: an expense carrying a targetAccountId
+ * used to be accepted and then appeared in the destination's journal without
+ * ever touching its balance, which is a row nobody can explain.
+ */
 const validateTransaction = (
   value: { type: TransactionType; accountId: string; targetAccountId?: string | null; categoryId?: string | null },
   context: z.RefinementCtx,
 ) => {
-  if (value.type === 'transfer' && !value.targetAccountId) {
-    context.addIssue({ code: 'custom', path: ['targetAccountId'], message: 'Выберите счёт назначения' })
+  if (value.type === 'transfer') {
+    if (!value.targetAccountId) {
+      context.addIssue({ code: 'custom', path: ['targetAccountId'], message: 'Выберите счёт назначения' })
+    }
+    if (value.targetAccountId === value.accountId) {
+      context.addIssue({ code: 'custom', path: ['targetAccountId'], message: 'Счета перевода должны отличаться' })
+    }
+    if (value.categoryId) {
+      context.addIssue({ code: 'custom', path: ['categoryId'], message: 'У перевода нет категории' })
+    }
+    return
   }
-  if (value.type === 'transfer' && value.targetAccountId === value.accountId) {
-    context.addIssue({ code: 'custom', path: ['targetAccountId'], message: 'Счета перевода должны отличаться' })
+  if (value.targetAccountId) {
+    context.addIssue({ code: 'custom', path: ['targetAccountId'], message: 'Счёт назначения есть только у перевода' })
   }
 }
 

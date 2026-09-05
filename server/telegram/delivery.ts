@@ -47,17 +47,51 @@ export async function runDeliveries(store: FinanceStore, now = new Date(), links
   const candidates = await store.reminderCandidates()
 
   for (const candidate of candidates) {
+    try {
+      await deliverTo(store, candidate, now, links, report)
+    } catch (error) {
+      // One person's failure is not everyone's. Without this, an error while
+      // building a digest — a missing wallet, a database hiccup — ended the
+      // batch, and everybody queued behind them silently got nothing.
+      report.failed += 1
+      console.error(JSON.stringify({
+        event: 'delivery_failed',
+        userId: candidate.userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      }))
+    }
+  }
+
+  return report
+}
+
+async function deliverTo(
+  store: FinanceStore,
+  candidate: ReminderCandidate,
+  now: Date,
+  links: LinkContext,
+  report: DeliveryReport,
+) {
+  {
     const planned = await planFor(store, candidate, now, links)
-    if (!planned) { report.skipped += 1; continue }
+    if (!planned) { report.skipped += 1; return }
 
     // Claiming before sending is what keeps two overlapping worker ticks from
     // writing to the same person twice.
     if (!(await store.claimDelivery(candidate.userId, planned.kind, planned.scheduledFor))) {
       report.skipped += 1
-      continue
+      return
     }
 
-    const outcome = await sendMessage(candidate.telegramUserId, planned.message)
+    let outcome: Awaited<ReturnType<typeof sendMessage>>
+    try {
+      outcome = await sendMessage(candidate.telegramUserId, planned.message)
+    } catch (error) {
+      // The slot was claimed a moment ago; leaving it claimed would silence
+      // this person for the rest of the evening over a transient failure.
+      await store.releaseDelivery(candidate.userId, planned.kind, planned.scheduledFor)
+      throw error
+    }
     if (outcome.ok) {
       await store.settleDelivery(candidate.userId, planned.kind, planned.scheduledFor)
       report.sent += 1
@@ -78,8 +112,6 @@ export async function runDeliveries(store: FinanceStore, now = new Date(), links
       : PACING_MS
     await wait(backOff)
   }
-
-  return report
 }
 
 /** The one message this person is owed right now, highest priority first. */

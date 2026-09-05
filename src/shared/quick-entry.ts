@@ -1,4 +1,4 @@
-import type { CategoryView, TransactionView } from './contracts.js'
+import { MAX_AMOUNT_KOPECKS, type CategoryView, type TransactionView } from './contracts.js'
 import { MERCHANT_HINTS, MERCHANT_PHRASES } from './merchant-hints.js'
 
 /** What the shortcut sends and what we made of it. */
@@ -205,11 +205,19 @@ export function resolveQuickEntry(
 
 /** Amounts arrive as free text from a number field: "1 250,50", "80", "12.5". */
 export function parseQuickAmount(value: string | number): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null
-  const cleaned = value.replace(/\s| | /g, '').replace(',', '.')
+  const kopecks = typeof value === 'number'
+    ? (Number.isFinite(value) ? Math.round(value * 100) : null)
+    : parseWrittenAmount(value)
+  if (kopecks === null || !Number.isSafeInteger(kopecks)) return null
+  // The ceiling every other channel enforces. Without it quick entry accepted
+  // a billion roubles that the manual editor refuses.
+  return kopecks > 0 && kopecks <= MAX_AMOUNT_KOPECKS ? kopecks : null
+}
+
+function parseWrittenAmount(value: string) {
+  const cleaned = value.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.')
   if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null
-  const amount = Math.round(Number(cleaned) * 100)
-  return amount > 0 ? amount : null
+  return Math.round(Number(cleaned) * 100)
 }
 
 /**
