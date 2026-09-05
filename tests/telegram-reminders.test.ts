@@ -456,6 +456,28 @@ describe('дайджест общего кошелька', () => {
   })
 })
 
+describe('получатели ручной рассылки', () => {
+  it('только те, кто разрешил боту писать', async () => {
+    const store = new MemoryFinanceStore()
+    await store.createSession({ id: 1, firstName: 'Алекс', lastName: null, username: 'a', languageCode: 'ru', allowsWriteToPm: true }, 'Europe/Moscow')
+    await store.createSession({ id: 2, firstName: 'Ирина', lastName: null, username: 'i', languageCode: 'ru' }, 'Europe/Moscow')
+
+    expect(await store.announcementRecipients()).toEqual([{ telegramUserId: 1 }])
+  })
+
+  it('нажатие /start добавляет человека в рассылку, блокировка убирает', async () => {
+    const store = new MemoryFinanceStore()
+    await store.createSession({ id: 5, firstName: 'Пётр', lastName: null, username: 'p', languageCode: 'ru' }, 'Europe/Moscow')
+    expect(await store.announcementRecipients()).toEqual([])
+
+    await store.noteBotContact(5)
+    expect(await store.announcementRecipients()).toEqual([{ telegramUserId: 5 }])
+
+    await store.revokeBotWriteAccess(5)
+    expect(await store.announcementRecipients()).toEqual([])
+  })
+})
+
 describe('настройки напоминаний через API', () => {
   let app: Awaited<ReturnType<typeof buildApp>>
   let store: MemoryFinanceStore

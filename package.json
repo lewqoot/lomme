@@ -13,6 +13,7 @@
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist-server/server/index.js",
     "worker": "node dist-server/server/worker.js",
+    "announce": "tsx scripts/announce.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "typecheck": "tsc -b tsconfig.app.json && tsc -p tsconfig.server.json --noEmit",

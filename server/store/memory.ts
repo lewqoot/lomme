@@ -642,6 +642,12 @@ export class MemoryFinanceStore implements FinanceStore {
     this.reminderDeliveries.delete(`${userId}:${kind}:${scheduledFor.toISOString()}`)
   }
 
+  async announcementRecipients() {
+    return [...this.users.values()]
+      .filter((user) => user.botWriteAccess)
+      .map((user) => ({ telegramUserId: user.telegramUserId }))
+  }
+
   async revokeBotWriteAccess(telegramUserId: number) {
     const userId = this.usersByTelegram.get(telegramUserId)
     if (userId) this.users.get(userId)!.botWriteAccess = false

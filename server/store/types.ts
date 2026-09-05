@@ -151,6 +151,8 @@ export interface FinanceStore {
   claimDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date): Promise<boolean>
   settleDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date, error?: string): Promise<void>
   releaseDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date): Promise<void>
+  /** Everyone the bot may write to, for a hand-run announcement. */
+  announcementRecipients(): Promise<Array<{ telegramUserId: number }>>
   /** Telegram says this chat is gone for good; stop writing to it. */
   revokeBotWriteAccess(telegramUserId: number): Promise<void>
   runWorkerBatch(): Promise<{ expiredMedia: number; forgottenUpdates: number }>

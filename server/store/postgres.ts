@@ -724,6 +724,12 @@ export class PostgresFinanceStore implements FinanceStore {
       `DELETE FROM reminder_deliveries WHERE user_id=$1 AND kind=$2 AND scheduled_for=$3 AND delivered_at IS NULL`, [userId, kind, scheduledFor])
   }
 
+  async announcementRecipients() {
+    const result = await this.pool.query(
+      `SELECT telegram_user_id FROM users WHERE deleted_at IS NULL AND bot_write_access ORDER BY created_at`)
+    return result.rows.map((row) => ({ telegramUserId: Number(row.telegram_user_id) }))
+  }
+
   /** Called when Telegram says the chat is gone for good. */
   async revokeBotWriteAccess(telegramUserId: number) {
     await this.pool.query(
