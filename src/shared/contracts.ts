@@ -14,7 +14,7 @@ export const timeZoneSchema = z.string().trim().min(1).max(80).refine((timeZone)
 }, 'Укажите корректный часовой пояс')
 
 export const transactionTypeSchema = z.enum(['expense', 'income', 'transfer'])
-export const transactionSourceSchema = z.enum(['manual', 'import', 'voice', 'receipt', 'shortcut'])
+export const transactionSourceSchema = z.enum(['manual', 'import', 'voice', 'receipt', 'shortcut', 'bot'])
 export const transactionPageQuerySchema = z.object({
   workspaceId: uuidSchema,
   accountId: uuidSchema.optional(),

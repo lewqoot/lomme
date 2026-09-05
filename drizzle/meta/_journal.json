@@ -71,6 +71,13 @@
       "when": 1788160000000,
       "tag": "0009_remove_theme_preference",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0010_bot_transaction_source",
+      "breakpoints": true
     }
   ]
 }

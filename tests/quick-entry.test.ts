@@ -70,6 +70,67 @@ describe('разбор строки из шортката', () => {
   })
 })
 
+describe('подбор категории по неполному тексту', () => {
+  const defaults = [
+    category('food', 'Продукты'),
+    category('cafe', 'Кафе и рестораны'),
+    category('transport', 'Транспорт'),
+    category('health', 'Здоровье'),
+    category('housing', 'Жилищные расходы'),
+  ]
+  const pick = (text: string, history: ReturnType<typeof past>[] = []) =>
+    resolveQuickEntry(text, 8_000, defaults, history)
+
+  it('понимает одно слово из названия категории', () => {
+    // Ровно то, что раньше уходило без категории: «кафе» вместо полного названия.
+    expect(pick('кафе').categoryId).toBe('cafe')
+    expect(pick('рестораны').categoryId).toBe('cafe')
+    expect(pick('жилищные').categoryId).toBe('housing')
+  })
+
+  it('понимает слово из названия внутри строки', () => {
+    expect(pick('вкусное кафе').categoryId).toBe('cafe')
+  })
+
+  it('принимает недописанное название', () => {
+    expect(pick('продук').categoryId).toBe('food')
+    expect(pick('транспо').categoryId).toBe('transport')
+  })
+
+  it('не угадывает по слишком короткому огрызку', () => {
+    expect(pick('про').categoryId).toBeNull()
+  })
+
+  it('узнаёт магазины и сервисы по названию', () => {
+    expect(pick('пятерочка').categoryId).toBe('food')
+    expect(pick('пятёрочка').categoryId).toBe('food')
+    expect(pick('озон').categoryId).toBeNull() // категории «Покупки» у этого человека нет
+    expect(pick('аптека').categoryId).toBe('health')
+    expect(pick('заправка').categoryId).toBe('transport')
+  })
+
+  it('разбирает составные названия сервисов', () => {
+    expect(pick('яндекс go').categoryId).toBe('transport')
+    expect(pick('яндекс еда').categoryId).toBe('cafe')
+  })
+
+  it('ставит личное правило выше общего словаря', () => {
+    // «кофе» в словаре ведёт в кафе, но этот человек однажды записал его в продукты.
+    expect(pick('кофе').categoryId).toBe('cafe')
+    expect(pick('кофе', [past('кофе с собой', 'food')]).categoryId).toBe('food')
+  })
+
+  it('молчит, когда слово подходит двум категориям сразу', () => {
+    const ambiguous = [category('cafe', 'Кафе и рестораны'), category('spot', 'Кафе у дома')]
+    expect(resolveQuickEntry('кафе', 8_000, ambiguous, []).categoryId).toBeNull()
+  })
+
+  it('не трогает архивные и доходные категории', () => {
+    const archived = [{ ...category('cafe', 'Кафе и рестораны'), archivedAt: '2026-01-01T00:00:00.000Z' }]
+    expect(resolveQuickEntry('кафе', 8_000, archived, []).categoryId).toBeNull()
+  })
+})
+
 describe('разбор суммы', () => {
   it('принимает привычные записи', () => {
     expect(parseQuickAmount('80')).toBe(8_000)

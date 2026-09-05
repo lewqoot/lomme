@@ -1,4 +1,5 @@
 import type { CategoryView, TransactionView } from './contracts.js'
+import { MERCHANT_HINTS, MERCHANT_PHRASES } from './merchant-hints.js'
 
 /** What the shortcut sends and what we made of it. */
 export type QuickEntry = {
@@ -52,16 +53,71 @@ function near(typed: string, name: string) {
   return distance(typed, name, limit) <= limit
 }
 
+const STOP_WORDS = new Set(['и', 'в', 'на', 'с', 'со', 'для', 'по', 'от', 'до', 'за', 'из'])
+
 /**
- * Works out which category a line of text from the shortcut means.
+ * The words of a category name that can stand for the whole of it. "Кафе и
+ * рестораны" is written as "кафе" far more often than in full, so each of its
+ * real words has to be a way in. Joining words are dropped: matching on "и"
+ * would put every third line into the first category that happens to have one.
+ */
+function nameTokens(name: string) {
+  return name.split(' ').filter((word) => word.length >= 3 && !STOP_WORDS.has(word))
+}
+
+type Named = { item: CategoryView; name: string; tokens: string[] }
+
+/**
+ * A guess is only made when exactly one category fits. Two candidates mean the
+ * text is ambiguous, and silently picking the first one is how a category list
+ * fills up with entries nobody put there.
+ */
+function onlyMatch(named: Named[], predicate: (entry: Named) => boolean): Named | null {
+  const found = named.filter(predicate)
+  return found.length === 1 ? found[0]! : null
+}
+
+/**
+ * What this person meant last time. Matched on the whole note first and then on
+ * its first word, so a category corrected once for "кофе с собой" also answers
+ * a later plain "кофе".
+ */
+function fromHistory(
+  whole: string,
+  head: string,
+  history: ReadonlyArray<Pick<TransactionView, 'note' | 'categoryId' | 'type'>>,
+  known: Set<string>,
+) {
+  const usable = history.filter((item) => item.type === 'expense' && item.categoryId && known.has(item.categoryId))
+  const exact = usable.find((item) => normalise(item.note) === whole)
+  if (exact) return exact.categoryId
+  if (head.length < 3) return null
+  const byFirstWord = usable.find((item) => normalise(item.note).split(' ')[0] === head)
+  return byFirstWord?.categoryId ?? null
+}
+
+/** Which default category a merchant name points at, phrases before words. */
+function fromMerchants(whole: string, words: string[]) {
+  const phrase = MERCHANT_PHRASES.find((candidate) => whole.includes(candidate))
+  if (phrase) return MERCHANT_HINTS[phrase]!
+  for (const word of words) {
+    const hint = MERCHANT_HINTS[word]
+    if (hint) return hint
+  }
+  return null
+}
+
+/**
+ * Works out which category a line of text means, for the shortcut and the bot
+ * alike.
  *
- * The text doubles as the note and the category hint, so nothing extra has to be
- * typed. Tried in order: the whole line as a category name, the first word as one,
- * then the same line as a note used before - after a few weeks of writing "стики"
- * that history is a better signal than any name matching.
+ * The text doubles as the note and the category hint, so nothing extra has to
+ * be typed. Rules are tried in order and the first that fits wins: the person's
+ * own history outranks the shared merchant dictionary, and both outrank a
+ * typo-tolerant comparison, which is the guess most likely to be wrong.
  *
- * Anything unmatched is left uncategorised on purpose. Inventing a category from a
- * typo would quietly fill the list with near-duplicates.
+ * Anything unmatched is left uncategorised on purpose. Inventing a category
+ * from a stray word would quietly fill the list with near-duplicates.
  */
 export function resolveQuickEntry(
   text: string,
@@ -72,35 +128,56 @@ export function resolveQuickEntry(
   const raw = text.trim()
   const whole = normalise(raw)
   const usable = categories.filter((item) => item.type === 'expense' && !item.archivedAt)
-  const named = usable.map((item) => ({ item, name: normalise(item.name) }))
+  const named: Named[] = usable.map((item) => {
+    const name = normalise(item.name)
+    return { item, name, tokens: nameTokens(name) }
+  })
 
   // An amount without a description has no categorisation signal. In particular,
   // it must not match an older transaction whose note also happened to be empty.
   if (!whole) return { amountKopecks, note: '', categoryId: null, categoryGuessed: false }
 
-  const exact = named.find((entry) => entry.name === whole)
-    ?? named.find((entry) => near(whole, entry.name))
-  if (exact) return { amountKopecks, note: raw, categoryId: exact.item.id, categoryGuessed: true }
-
   const words = whole.split(' ')
   const head = words[0] ?? ''
-  if (head && words.length > 1) {
-    const byHead = named.find((entry) => entry.name === head)
-      ?? named.find((entry) => entry.name.split(' ')[0] === head)
-      ?? named.find((entry) => near(head, entry.name))
+  const guessed = (categoryId: string, note: string): QuickEntry =>
+    ({ amountKopecks, note, categoryId, categoryGuessed: true })
+
+  const exact = named.find((entry) => entry.name === whole)
+  if (exact) return guessed(exact.item.id, raw)
+
+  const remembered = fromHistory(whole, head, history, new Set(usable.map((item) => item.id)))
+  if (remembered) return guessed(remembered, raw)
+
+  // A category name opening the line describes the rest of it: "Продукты на
+  // неделю" is a food entry noted as "на неделю".
+  if (words.length > 1) {
+    const byHead = onlyMatch(named, (entry) => entry.name === head || entry.tokens.includes(head))
     if (byHead) {
       const note = raw.slice(raw.toLocaleLowerCase('ru').indexOf(head) + head.length).trim()
-      return { amountKopecks, note: note || raw, categoryId: byHead.item.id, categoryGuessed: true }
+      return guessed(byHead.item.id, note || raw)
     }
   }
 
-  // What this note meant last time. Only expenses, and only categories that still exist.
-  const known = new Set(usable.map((item) => item.id))
-  const remembered = history.find((item) => item.type === 'expense'
-    && item.categoryId
-    && known.has(item.categoryId)
-    && normalise(item.note) === whole)
-  if (remembered) return { amountKopecks, note: raw, categoryId: remembered.categoryId, categoryGuessed: true }
+  // One word of a category name, standing for the whole name: "кафе".
+  const byToken = onlyMatch(named, (entry) => entry.tokens.includes(whole)
+    || words.some((word) => word.length >= 3 && entry.tokens.includes(word)))
+  if (byToken) return guessed(byToken.item.id, raw)
+
+  // A name typed only as far as it stays unambiguous: "продук", "жилищ".
+  const byPrefix = whole.length >= 4
+    ? onlyMatch(named, (entry) => entry.tokens.some((token) => token.length > whole.length && token.startsWith(whole)))
+    : null
+  if (byPrefix) return guessed(byPrefix.item.id, raw)
+
+  const merchantName = fromMerchants(whole, words)
+  if (merchantName) {
+    const target = named.find((entry) => entry.name === normalise(merchantName))
+    if (target) return guessed(target.item.id, raw)
+  }
+
+  const misspelt = named.find((entry) => near(whole, entry.name))
+    ?? (words.length > 1 ? named.find((entry) => near(head, entry.name)) : undefined)
+  if (misspelt) return guessed(misspelt.item.id, raw)
 
   return { amountKopecks, note: raw, categoryId: null, categoryGuessed: false }
 }

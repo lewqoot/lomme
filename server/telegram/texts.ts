@@ -27,14 +27,22 @@ function openApp(appUrl: string | null): InlineKeyboard {
   return appUrl ? [[{ text: 'Открыть Lomme', web_app: { url: appUrl } }]] : []
 }
 
+/** The same rendering the shortcut uses, so both confirmations read alike. */
+export function money(amountKopecks: number) {
+  return `${(amountKopecks / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`
+}
+
 export function welcome(appUrl: string | null): BotMessage {
   return {
     text: [
       '👋 Привет! Я Lomme.',
       '',
-      'Помогаю вести траты и доходы и показываю, куда на самом деле уходят деньги. Никаких таблиц.',
+      'Записываю траты и показываю, куда на самом деле уходят деньги. Никаких таблиц.',
       '',
-      'Всё живёт в приложении: записи, аналитика, кошельки и категории. Открывай кнопкой ниже.',
+      'Самое быстрое — напиши прямо сюда:',
+      '1250 такси — и готово.',
+      '',
+      'А в приложении — аналитика, история и все настройки.',
     ].join('\n'),
     keyboard: [...openApp(appUrl), [HELP_BUTTON]],
   }
@@ -42,7 +50,7 @@ export function welcome(appUrl: string | null): BotMessage {
 
 export function welcomeBack(appUrl: string | null): BotMessage {
   return {
-    text: 'С возвращением 👋',
+    text: 'С возвращением 👋\n\nНапиши трату сюда или открой приложение.',
     keyboard: openApp(appUrl),
   }
 }
@@ -52,14 +60,68 @@ export function help(appUrl: string | null): BotMessage {
     text: [
       'Как со мной работать',
       '',
-      'Записи, аналитика, кошельки и категории — в приложении. Открывай кнопкой ниже или через меню слева от поля ввода.',
+      'Записать трату — напиши сумму и что это:',
+      '1250 такси',
+      'пятёрочка 2340',
+      'кафе 890',
+      '430 аптека',
       '',
-      'Хочешь записывать траты за пару секунд, не открывая Telegram? В приложении зайди в «Настройки» → «Быстрый ввод» и поставь шорткат на экран блокировки.',
+      'Порядок не важен. Понимаю названия магазинов и сокращения, категорию подберу сам. Ошибусь — поправишь в приложении.',
       '',
-      'Ещё я приношу сюда приглашения в общие кошельки — их присылают те, кто зовёт тебя вести бюджет вместе.',
+      'Хочешь ещё быстрее? В приложении «Настройки» → «Быстрый ввод» ставит шорткат на экран блокировки — тогда Telegram открывать не надо совсем.',
+      '',
+      'Аналитика, кошельки и категории — тоже в приложении.',
     ].join('\n'),
     keyboard: openApp(appUrl),
   }
+}
+
+/** The category was chosen outright: the name is a statement, not a question. */
+export function recorded(amountKopecks: number, categoryName: string): BotMessage {
+  return { text: `✅ Записано ${money(amountKopecks)}\n${categoryName}` }
+}
+
+/**
+ * The category was worked out from the text. Saying so once is cheaper than a
+ * month of analytics quietly built on a wrong guess.
+ */
+export function recordedGuess(amountKopecks: number, categoryName: string): BotMessage {
+  return { text: `✅ Записано ${money(amountKopecks)}\n${categoryName} — если не туда, поправь в приложении` }
+}
+
+export function recordedWithoutCategory(amountKopecks: number): BotMessage {
+  return { text: `✅ Записано ${money(amountKopecks)}\nБез категории` }
+}
+
+export function amountNotFound(): BotMessage {
+  return { text: '🤔 Не нашёл сумму\n\nНапиши так: 450 кофе или кофе 450' }
+}
+
+/** Written for someone who pressed the microphone because other bots take voice. */
+export function unsupportedAttachment(): BotMessage {
+  return {
+    text: [
+      'Голосовые и фото пока не разбираю — учусь.',
+      '',
+      'Напиши текстом: 340 кофе — так пойму сразу.',
+    ].join('\n'),
+  }
+}
+
+/** They messaged the bot before ever opening the Mini App, so there is no wallet. */
+export function noAccountYet(appUrl: string | null): BotMessage {
+  return {
+    text: [
+      'Похоже, ты ещё не открывал приложение.',
+      '',
+      'Открой Lomme — заведу кошелёк, и дальше можно писать траты прямо сюда.',
+    ].join('\n'),
+    keyboard: openApp(appUrl),
+  }
+}
+
+export function couldNotRecord(): BotMessage {
+  return { text: '⚠️ Не записалось\nПопробуй ещё раз' }
 }
 
 export function accountInvite(accountName: string, inviteUrl: string): BotMessage {
@@ -83,13 +145,13 @@ export function accountInviteExpired(): BotMessage {
   }
 }
 
-/** Anything the bot has no answer for yet. Says what it can do instead. */
+/** Text with no number in it at all: not a failed entry, just a hello. */
 export function fallback(appUrl: string | null): BotMessage {
   return {
     text: [
-      'Пока я умею немного: открываю приложение и приношу приглашения в общие кошельки.',
+      'Я записываю траты. Напиши сумму и что это — например, 450 кофе.',
       '',
-      'Всё остальное — в приложении.',
+      'Аналитика и всё остальное — в приложении.',
     ].join('\n'),
     keyboard: openApp(appUrl),
   }

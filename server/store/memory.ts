@@ -207,6 +207,16 @@ export class MemoryFinanceStore implements FinanceStore {
   async createQuickEntry(key: string, input: QuickEntryInput) {
     const userId = [...this.quickKeys.entries()].find(([, hash]) => quickKeyMatches(key, hash))?.[0]
     if (!userId) throw new AppError(401, 'QUICK_KEY_INVALID', 'Ключ не подходит')
+    return this.recordQuickEntry(userId, input, 'shortcut')
+  }
+
+  async createBotEntry(telegramUserId: number, input: QuickEntryInput) {
+    const userId = this.usersByTelegram.get(telegramUserId)
+    if (!userId) throw new AppError(404, 'BOT_USER_UNKNOWN', 'Сначала откройте приложение')
+    return this.recordQuickEntry(userId, input, 'bot')
+  }
+
+  private async recordQuickEntry(userId: string, input: QuickEntryInput, source: 'shortcut' | 'bot') {
     const amountKopecks = parseQuickAmount(input.amount)
     if (!amountKopecks) throw new AppError(400, 'QUICK_AMOUNT_INVALID', 'Не разобрали сумму')
 
@@ -224,11 +234,16 @@ export class MemoryFinanceStore implements FinanceStore {
     const transaction: TransactionView = {
       id: randomUUID(), type: 'expense', amountKopecks: entry.amountKopecks, accountId: account.id,
       targetAccountId: null, categoryId: entry.categoryId, occurredAt: new Date().toISOString(),
-      note: entry.note, source: 'shortcut', authorName: this.requireUser(userId).firstName, version: 1,
+      note: entry.note, source, authorName: this.requireUser(userId).firstName, version: 1,
       categoryGuessed: entry.categoryGuessed,
     }
     this.transactions.set(workspaceId, [transaction, ...(this.transactions.get(workspaceId) || [])])
-    return { id: transaction.id, categoryName: categories.find((item) => item.id === entry.categoryId)?.name ?? null }
+    return {
+      id: transaction.id,
+      categoryName: categories.find((item) => item.id === entry.categoryId)?.name ?? null,
+      categoryGuessed: entry.categoryGuessed,
+      amountKopecks: entry.amountKopecks,
+    }
   }
 
   async createTransaction(userId: string, input: TransactionInput, idempotencyKey: string) {

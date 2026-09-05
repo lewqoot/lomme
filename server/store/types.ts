@@ -30,6 +30,15 @@ export type CategoryUpdate = z.infer<typeof updateCategorySchema>
 export type CategoryReorder = z.infer<typeof reorderCategoriesSchema>
 export type WorkspaceInput = z.infer<typeof createWorkspaceSchema>
 
+/** What both free-text entry points report back, enough to answer a person. */
+export type QuickEntryResult = {
+  id: string
+  categoryName: string | null
+  /** True when the category was matched from the text rather than chosen. */
+  categoryGuessed: boolean
+  amountKopecks: number
+}
+
 export type SessionUser = {
   id: string
   firstName: string
@@ -66,7 +75,9 @@ export interface FinanceStore {
   /** Whether the user currently has a shortcut key. */
   hasQuickKey(userId: string): Promise<boolean>
   /** Records one line from the shortcut, working the category out from its text. */
-  createQuickEntry(key: string, input: QuickEntryInput): Promise<{ id: string; categoryName: string | null }>
+  createQuickEntry(key: string, input: QuickEntryInput): Promise<QuickEntryResult>
+  /** The same, for a line typed straight into the bot chat. */
+  createBotEntry(telegramUserId: number, input: QuickEntryInput): Promise<QuickEntryResult>
   updateTransaction(userId: string, transactionId: string, input: TransactionUpdate): Promise<void>
   deleteTransaction(userId: string, transactionId: string, version: number): Promise<void>
   createAccount(userId: string, input: AccountInput): Promise<{ id: string }>

@@ -10,6 +10,7 @@ function context(overrides: Partial<RouterContext> = {}): RouterContext {
     appUrl: APP_URL,
     noteBotContact: async () => ({ known: false }),
     resolveInvite: async () => null,
+    recordEntry: async () => ({ status: 'recorded', entry: { categoryName: 'Продукты', categoryGuessed: false, amountKopecks: 320_000 } }),
     ...overrides,
   }
 }
@@ -33,7 +34,7 @@ describe('bot router', () => {
     const action = await routeUpdate(privateMessage('/start'), context({ noteBotContact: async () => ({ known: true }) }))
 
     if (action.kind !== 'send') throw new Error('ожидали отправку')
-    expect(action.message.text).toBe('С возвращением 👋')
+    expect(action.message.text).toContain('С возвращением')
   })
 
   it('запоминает право писать по нажатию /start', async () => {
@@ -82,6 +83,75 @@ describe('bot router', () => {
 
     if (action.kind !== 'send') throw new Error('ожидали отправку')
     expect(action.message.text).toContain('уже не работает')
+  })
+
+  it('записывает трату, написанную в чат', async () => {
+    const seen: Array<[number, string, string]> = []
+    const action = await routeUpdate(privateMessage('3200 продукты', 777), context({
+      recordEntry: async (id, amount, text) => {
+        seen.push([id, amount, text])
+        return { status: 'recorded', entry: { categoryName: 'Продукты', categoryGuessed: false, amountKopecks: 320_000 } }
+      },
+    }))
+
+    expect(seen).toEqual([[777, '3200', 'продукты']])
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    expect(action.message.text).toMatch(/^✅ Записано 3\s200 ₽\nПродукты$/u)
+  })
+
+  it('честно помечает угаданную категорию', async () => {
+    const action = await routeUpdate(privateMessage('пятёрочка 2340'), context({
+      recordEntry: async () => ({ status: 'recorded', entry: { categoryName: 'Продукты', categoryGuessed: true, amountKopecks: 234_000 } }),
+    }))
+
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    expect(action.message.text).toContain('Продукты — если не туда, поправь')
+  })
+
+  it('записывает без категории, когда подобрать не вышло', async () => {
+    const action = await routeUpdate(privateMessage('1900 подарок жене'), context({
+      recordEntry: async () => ({ status: 'recorded', entry: { categoryName: null, categoryGuessed: false, amountKopecks: 190_000 } }),
+    }))
+
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    expect(action.message.text).toContain('Без категории')
+  })
+
+  it('подсказывает формат, когда число есть, но суммой быть не может', async () => {
+    // Ни в начале, ни в конце строки — разобрать нечего, но человек явно пытался.
+    const action = await routeUpdate(privateMessage('встреча в 5 утра'), context({
+      recordEntry: async () => { throw new Error('до записи дойти не должно') },
+    }))
+
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    expect(action.message.text).toContain('Не нашёл сумму')
+  })
+
+  it('на обычную фразу без цифр не жалуется на сумму', async () => {
+    const action = await routeUpdate(privateMessage('привет'), context())
+
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    expect(action.message.text).toContain('Я записываю траты')
+    expect(action.message.text).not.toContain('Не нашёл сумму')
+  })
+
+  it('зовёт открыть приложение того, у кого ещё нет кошелька', async () => {
+    const action = await routeUpdate(privateMessage('450 кофе'), context({
+      recordEntry: async () => ({ status: 'no-account' }),
+    }))
+
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    expect(action.message.text).toContain('ещё не открывал приложение')
+  })
+
+  it('отвечает на голосовое вместо молчания', async () => {
+    const action = await routeUpdate({
+      update_id: 7,
+      message: { chat: { id: 900, type: 'private' }, from: { id: 500 }, voice: { duration: 4 } },
+    }, context())
+
+    if (action.kind !== 'send') throw new Error('ожидали отправку')
+    expect(action.message.text).toContain('Голосовые и фото пока не разбираю')
   })
 
   it('молчит в группах и на пустых апдейтах', async () => {
@@ -165,6 +235,43 @@ describe('bot webhook', () => {
     await deliver(13)
 
     expect(await store.noteBotContact(777)).toEqual({ known: true })
+  })
+
+  it('записывает трату из чата в тот же кошелёк, что и приложение', async () => {
+    const sent: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/sendMessage')) sent.push(JSON.parse(String(init?.body)).text as string)
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    const owner = await store.createSession({ id: 777, firstName: 'Алекс', lastName: null, username: 'alex', languageCode: 'ru' }, 'Europe/Moscow')
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/telegram/webhook/webhook-secret',
+      payload: { update_id: 20, message: { text: 'пятёрочка 2340', chat: { id: 900, type: 'private' }, from: { id: 777 } } },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(sent[0]).toContain('Продукты')
+    const snapshot = await store.snapshot(owner.user.id)
+    const recorded = snapshot.transactions.find((entry) => entry.note === 'пятёрочка')
+    expect(recorded).toMatchObject({ amountKopecks: 234_000, source: 'bot', categoryGuessed: true })
+  })
+
+  it('не выдумывает кошелёк тому, кто не открывал приложение', async () => {
+    const sent: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/sendMessage')) sent.push(JSON.parse(String(init?.body)).text as string)
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/telegram/webhook/webhook-secret',
+      payload: { update_id: 21, message: { text: '450 кофе', chat: { id: 901, type: 'private' }, from: { id: 999 } } },
+    })
+
+    expect(sent[0]).toContain('ещё не открывал приложение')
   })
 
   it('прячет вебхук за секретом', async () => {

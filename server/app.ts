@@ -405,6 +405,18 @@ export async function buildApp(store: FinanceStore) {
     const action = await routeUpdate(update, {
       appUrl: telegramWebAppUrl(),
       noteBotContact: (telegramUserId) => store.noteBotContact(telegramUserId),
+      recordEntry: async (telegramUserId, amount, text) => {
+        try {
+          const entry = await store.createBotEntry(telegramUserId, parse(quickEntrySchema, { amount, text }))
+          return { status: 'recorded', entry }
+        } catch (error) {
+          // Someone who has never opened the Mini App has no wallet to record
+          // into, and that is worth its own answer rather than a generic failure.
+          if (error instanceof AppError && error.code === 'BOT_USER_UNKNOWN') return { status: 'no-account' }
+          request.log.error({ event: 'telegram_entry_failed', error: error instanceof Error ? error.message : 'unknown' }, 'Telegram entry failed')
+          return { status: 'failed' }
+        }
+      },
       resolveInvite: async (token) => {
         try {
           const preview = await store.previewAccountInvite('', token)

@@ -222,9 +222,26 @@ export class PostgresFinanceStore implements FinanceStore {
 
   async createQuickEntry(key: string, input: QuickEntryInput) {
     // Looked up by hash, so the key itself never has to be compared in SQL.
-    const owner = await this.pool.query('SELECT id, first_name, active_account_id FROM users WHERE quick_key_hash=$1', [hashQuickKey(key)])
+    const owner = await this.pool.query('SELECT id, active_account_id FROM users WHERE quick_key_hash=$1 AND deleted_at IS NULL', [hashQuickKey(key)])
     const user = owner.rows[0]
     if (!user) throw new AppError(401, 'QUICK_KEY_INVALID', 'Ключ не подходит')
+    return this.recordQuickEntry(user.id as string, user.active_account_id as string | null, input, 'shortcut')
+  }
+
+  async createBotEntry(telegramUserId: number, input: QuickEntryInput) {
+    const owner = await this.pool.query('SELECT id, active_account_id FROM users WHERE telegram_user_id=$1 AND deleted_at IS NULL', [telegramUserId])
+    const user = owner.rows[0]
+    if (!user) throw new AppError(404, 'BOT_USER_UNKNOWN', 'Сначала откройте приложение')
+    return this.recordQuickEntry(user.id as string, user.active_account_id as string | null, input, 'bot')
+  }
+
+  /**
+   * The single path every free-text entry takes, whichever door it came in by.
+   * Only the source column differs, so an improvement to category matching
+   * reaches the shortcut and the bot at the same moment.
+   */
+  private async recordQuickEntry(userId: string, activeAccountId: string | null, input: QuickEntryInput, source: 'shortcut' | 'bot') {
+    const user = { id: userId, active_account_id: activeAccountId }
     const amountKopecks = parseQuickAmount(input.amount)
     if (!amountKopecks) throw new AppError(400, 'QUICK_AMOUNT_INVALID', 'Не разобрали сумму')
 
@@ -252,11 +269,13 @@ export class PostgresFinanceStore implements FinanceStore {
 
     const inserted = await this.pool.query(
       `INSERT INTO transactions (workspace_id,type,amount_kopecks,account_id,category_id,occurred_at,note,source,category_guessed,created_by_user_id)
-       VALUES ($1,'expense',$2,$3,$4,now(),$5,'shortcut',$6,$7) RETURNING id`,
-      [workspaceId, entry.amountKopecks, accountId, entry.categoryId, entry.note, entry.categoryGuessed, user.id])
+       VALUES ($1,'expense',$2,$3,$4,now(),$5,$8,$6,$7) RETURNING id`,
+      [workspaceId, entry.amountKopecks, accountId, entry.categoryId, entry.note, entry.categoryGuessed, user.id, source])
     return {
       id: inserted.rows[0].id as string,
       categoryName: categories.find((item) => item.id === entry.categoryId)?.name ?? null,
+      categoryGuessed: entry.categoryGuessed,
+      amountKopecks: entry.amountKopecks,
     }
   }
 

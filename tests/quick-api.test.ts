@@ -115,7 +115,8 @@ describe('быстрый ввод из шортката', () => {
     expect(response.statusCode).toBe(200)
     expect(response.headers['content-type']).toContain('text/plain')
     // ru-RU разделяет разряды неразрывным пробелом.
-    expect(response.body.replace(/[\u00a0\u202f]/g, ' ')).toBe('✅ Записано 1 250,5 ₽\nБез категории')
+    // «такси» знает словарь сервисов, поэтому категория подбирается без точного названия.
+    expect(response.body.replace(/[\u00a0\u202f]/g, ' ')).toBe('✅ Записано 1 250,5 ₽\nТранспорт')
 
     const created = (await snapshot()).transactions.find((item: { note: string | null }) => item.note === 'такси домой')
     expect(created.amountKopecks).toBe(125_050)
