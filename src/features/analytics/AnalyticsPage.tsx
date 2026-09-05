@@ -7,7 +7,7 @@ import type { PeriodSelection } from '../period/model'
 import { haptics } from '../../lib/telegram'
 import { tint } from '../../lib/palette'
 import type { AppSnapshot } from '../../shared/contracts'
-import { buildSlices, CHART_KINDS, type AnalyticsType, type ChartKind } from './model'
+import { buildFilteredTrend, buildSlices, CHART_KINDS, type AnalyticsType, type ChartKind } from './model'
 
 const AnalyticsChart = lazy(() => import('../../charts/AnalyticsChart'))
 
@@ -36,6 +36,7 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
   // Sankey needs both directions at once: sources on the left, spending on the right.
   const income = useMemo(() => buildSlices(data.summary, 'income', excluded), [data.summary, excluded])
   const expense = useMemo(() => buildSlices(data.summary, 'expense', excluded), [data.summary, excluded])
+  const trend = useMemo(() => buildFilteredTrend(data.summary, type, excluded), [data.summary, type, excluded])
 
   const toggle = (key: string) => {
     haptics.selection()
@@ -107,7 +108,7 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
                 incomeSlices={income.visible}
                 expenseSlices={expense.visible}
                 totalKopecks={totalKopecks}
-                trend={data.summary.trend}
+                trend={trend}
                 granularity={data.summary.granularity}
                 tone={type}
                 incomeKopecks={income.totalKopecks}

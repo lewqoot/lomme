@@ -270,6 +270,8 @@ export type DashboardSummary = {
   mostFrequentExpenseCategoryCount: number
   byCategory: Array<{ categoryId: string | null; name: string; color: string; icon: string | null; amountKopecks: number; type: 'income' | 'expense' }>
   trend: Array<{ date: string; incomeKopecks: number; expenseKopecks: number }>
+  /** Complete server aggregate used when Analytics excludes individual categories. */
+  trendByCategory?: Array<{ date: string; categoryId: string | null; amountKopecks: number; type: 'income' | 'expense' }>
 }
 
 export type AppSnapshot = {

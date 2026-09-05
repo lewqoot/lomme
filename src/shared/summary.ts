@@ -42,6 +42,7 @@ export function calculateSummary(
   const categoryMap = new Map(categories.map((category) => [category.id, category]))
   // Analytics needs both directions, so totals are keyed by type as well as category.
   const categoryTotals = new Map<string, number>()
+  const categoryTrend = new Map<string, number>()
   const keyFor = (type: 'income' | 'expense', categoryId: string | null) => `${type}:${categoryId ?? ''}`
   const dayTotals = new Map<string, { incomeKopecks: number; expenseKopecks: number }>()
   // The chart may bucket by month, but "most expensive day" has to stay a day, so
@@ -56,6 +57,8 @@ export function calculateSummary(
     if (transaction.type === 'expense' || transaction.type === 'income') {
       const key = keyFor(transaction.type, transaction.categoryId)
       categoryTotals.set(key, (categoryTotals.get(key) || 0) + transaction.amountKopecks)
+      const trendKey = `${dateKey}|${transaction.type}|${transaction.categoryId ?? ''}`
+      categoryTrend.set(trendKey, (categoryTrend.get(trendKey) || 0) + transaction.amountKopecks)
     }
     dayTotals.set(dateKey, day)
     if (transaction.type === 'expense') {
@@ -142,5 +145,11 @@ export function calculateSummary(
     trend: [...dayTotals.entries()]
       .map(([day, totals]) => ({ date: day, ...totals }))
       .sort((left, right) => left.date.localeCompare(right.date)),
+    trendByCategory: [...categoryTrend.entries()]
+      .map(([key, amountKopecks]) => {
+        const [date, type, rawId] = key.split('|') as [string, 'income' | 'expense', string]
+        return { date, type, categoryId: rawId || null, amountKopecks }
+      })
+      .sort((left, right) => left.date.localeCompare(right.date) || left.type.localeCompare(right.type) || String(left.categoryId).localeCompare(String(right.categoryId))),
   }
 }

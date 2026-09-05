@@ -1,4 +1,4 @@
-import type { DashboardSummary, TransactionType } from '../../shared/contracts'
+import type { DashboardSummary, TransactionType } from '../../shared/contracts.js'
 
 export type ChartKind = 'donut' | 'line' | 'bars' | 'sankey'
 export type AnalyticsType = Extract<TransactionType, 'income' | 'expense'>
@@ -45,4 +45,19 @@ export function buildSlices(summary: DashboardSummary, type: AnalyticsType, excl
   const totalKopecks = visible.reduce((sum, item) => sum + item.amountKopecks, 0)
   const grandTotalKopecks = slices.reduce((sum, item) => sum + item.amountKopecks, 0)
   return { slices, visible, totalKopecks, grandTotalKopecks, allIncluded: visible.length === slices.length }
+}
+
+/** Builds the line from complete server buckets, never from the paged journal. */
+export function buildFilteredTrend(summary: DashboardSummary, type: AnalyticsType, excluded: ReadonlySet<string>) {
+  if (!summary.trendByCategory) return summary.trend
+  const amounts = new Map<string, number>()
+  for (const point of summary.trendByCategory) {
+    if (point.type !== type || excluded.has(sliceKey(type, point.categoryId))) continue
+    amounts.set(point.date, (amounts.get(point.date) || 0) + point.amountKopecks)
+  }
+  return summary.trend.map((point) => ({
+    date: point.date,
+    incomeKopecks: type === 'income' ? amounts.get(point.date) || 0 : 0,
+    expenseKopecks: type === 'expense' ? amounts.get(point.date) || 0 : 0,
+  }))
 }

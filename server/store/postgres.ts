@@ -245,12 +245,11 @@ export class PostgresFinanceStore implements FinanceStore {
       FROM transactions t LEFT JOIN categories c ON c.id=t.category_id
       WHERE t.workspace_id=$1 AND t.deleted_at IS NULL AND t.occurred_at BETWEEN $2 AND $3 AND t.type IN ('income','expense') AND t.account_id=ANY($5::uuid[])
       GROUP BY t.type,t.category_id,c.name,c.color,c.icon ORDER BY amount DESC`, [activeWorkspaceId, window.start, window.end, DATA_COLORS.categoryFallback, scopedAccountIds]),
-      this.pool.query(`SELECT to_char(occurred_at AT TIME ZONE $4,$5) AS bucket,
-        COALESCE(SUM(amount_kopecks) FILTER (WHERE type='income'),0) AS income,
-        COALESCE(SUM(amount_kopecks) FILTER (WHERE type='expense'),0) AS expense
+      this.pool.query(`SELECT to_char(occurred_at AT TIME ZONE $4,$5) AS bucket,type,category_id,
+        SUM(amount_kopecks) AS amount
       FROM transactions
       WHERE workspace_id=$1 AND deleted_at IS NULL AND occurred_at BETWEEN $2 AND $3 AND type IN ('income','expense') AND account_id=ANY($6::uuid[])
-      GROUP BY bucket ORDER BY bucket`, [activeWorkspaceId, window.start, window.end, currentUser.timezone, byMonth ? 'YYYY-MM' : 'YYYY-MM-DD', scopedAccountIds]),
+      GROUP BY bucket,type,category_id ORDER BY bucket,type,category_id`, [activeWorkspaceId, window.start, window.end, currentUser.timezone, byMonth ? 'YYYY-MM' : 'YYYY-MM-DD', scopedAccountIds]),
     ])
     const categories: CategoryView[] = categoryResult.rows.map(categoryRow)
     const summary = summaryFromSql(summaryResult.rows[0], categorySummaryResult.rows, trendResult.rows, window, byMonth, currentUser.timezone)
@@ -1002,6 +1001,17 @@ function summaryFromSql(
       expenseFreeStreakDays = Math.max(expenseFreeStreakDays, currentExpenseFreeStreakDays)
     }
   }
+  const trendTotals = new Map<string, { incomeKopecks: number; expenseKopecks: number }>()
+  const trendByCategory = trend.map((row) => {
+    const date = row.bucket as string
+    const type = row.type as 'income' | 'expense'
+    const amountKopecks = Number(row.amount)
+    const bucket = trendTotals.get(date) || { incomeKopecks: 0, expenseKopecks: 0 }
+    if (type === 'income') bucket.incomeKopecks += amountKopecks
+    else bucket.expenseKopecks += amountKopecks
+    trendTotals.set(date, bucket)
+    return { date, type, categoryId: row.category_id as string | null, amountKopecks }
+  })
   return {
     periodStart: range.start.toISOString(),
     periodEnd: range.end.toISOString(),
@@ -1024,7 +1034,8 @@ function summaryFromSql(
     mostFrequentExpenseCategoryId: (mostFrequentExpense?.category_id as string | null | undefined) ?? null,
     mostFrequentExpenseCategoryCount: Number(mostFrequentExpense?.count ?? 0),
     byCategory: categoryItems,
-    trend: trend.map((row) => ({ date: row.bucket as string, incomeKopecks: Number(row.income), expenseKopecks: Number(row.expense) })),
+    trend: [...trendTotals.entries()].map(([date, amounts]) => ({ date, ...amounts })),
+    trendByCategory,
   }
 }
 
