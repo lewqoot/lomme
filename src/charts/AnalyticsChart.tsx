@@ -89,6 +89,7 @@ function Trend({ trend, granularity, tone, animate }: { trend: TrendPoint[]; gra
     value: (tone === 'income' ? item.incomeKopecks : item.expenseKopecks) / 100,
   }))
   const average = data.length ? data.reduce((sum, item) => sum + item.value, 0) / data.length : 0
+  const averageLabel = granularity === 'month' ? 'Сред. за месяц' : 'Сред. за день'
 
   return <ResponsiveContainer width="100%" height={230}>
     <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
@@ -104,7 +105,7 @@ function Trend({ trend, granularity, tone, animate }: { trend: TrendPoint[]; gra
       <Area type="monotone" dataKey="value" stroke="none" fill="url(#trend-fill)" isAnimationActive={animate} animationDuration={420} animationEasing="ease-out" />
       <Line type="monotone" dataKey="value" stroke={colour} strokeWidth={2.4} dot={false} isAnimationActive={animate} animationDuration={440} animationEasing="ease-out" />
       {average > 0 && <ReferenceLine y={average} stroke={colour} strokeDasharray="5 5" strokeOpacity=".7"
-        label={{ value: `Сред. ${short(Math.round(average * 100))}`, position: 'insideBottomRight', fill: colour, fontSize: CHART_TYPE.label }} />}
+        label={{ value: `${averageLabel} ${short(Math.round(average * 100))}`, position: 'insideBottomRight', fill: colour, fontSize: CHART_TYPE.label }} />}
     </ComposedChart>
   </ResponsiveContainer>
 }

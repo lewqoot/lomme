@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calculateSummary, periodForMonth } from '../server/lib/analytics.js'
 import type { CategoryView, TransactionView } from '../src/shared/contracts.js'
-import { hasReliableInsightSample, savedIncomePercent } from '../src/features/insights/reliability.js'
+import { hasReliableInsightSample, hasReliableRunwaySample, savedIncomePercent } from '../src/features/insights/reliability.js'
 
 describe('financial analytics', () => {
   it('не считает переводы доходом или расходом и сохраняет точность до копейки', () => {
@@ -43,5 +43,12 @@ describe('достоверность инсайтов', () => {
   it('не округляет неполное сохранение дохода до 100%', () => {
     expect(savedIncomePercent(1_000_00, 1, 999_99)).toBe(99)
     expect(savedIncomePercent(1_000_00, 0, 1_000_00)).toBe(100)
+  })
+
+  it('не строит прогноз подушки по короткой или редкой истории', () => {
+    expect(hasReliableRunwaySample(29, 100, 50_000)).toBe(false)
+    expect(hasReliableRunwaySample(60, 9, 50_000)).toBe(false)
+    expect(hasReliableRunwaySample(60, 20, 0)).toBe(false)
+    expect(hasReliableRunwaySample(30, 10, 50_000)).toBe(true)
   })
 })

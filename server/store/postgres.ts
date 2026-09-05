@@ -17,6 +17,7 @@ import { hashQuickKey, issueQuickKey } from '../lib/quick-key.js'
 import { hintKeyword, parseQuickAmount, resolveQuickEntry } from '../../src/shared/quick-entry.js'
 import { zonedDayNumber } from '../../src/shared/timezone.js'
 import { DATA_COLORS } from '../../src/shared/design-tokens.js'
+import { fillTrendBuckets } from '../../src/shared/summary.js'
 import { resolveRange, type SnapshotRange } from '../lib/range.js'
 import { decodeTransactionCursor, encodeTransactionCursor } from '../lib/transaction-cursor.js'
 import { AppError, conflict, forbidden, notFound } from '../lib/errors.js'
@@ -1024,7 +1025,13 @@ function summaryFromSql(
     mostFrequentExpenseCategoryId: (mostFrequentExpense?.category_id as string | null | undefined) ?? null,
     mostFrequentExpenseCategoryCount: Number(mostFrequentExpense?.count ?? 0),
     byCategory: categoryItems,
-    trend: trend.map((row) => ({ date: row.bucket as string, incomeKopecks: Number(row.income), expenseKopecks: Number(row.expense) })),
+    trend: fillTrendBuckets(
+      trend.map((row) => ({ date: row.bucket as string, incomeKopecks: Number(row.income), expenseKopecks: Number(row.expense) })),
+      range,
+      cutoff,
+      byMonth ? 'month' : 'day',
+      timeZone,
+    ),
   }
 }
 

@@ -34,6 +34,9 @@ describe('аудит: агрегаты', () => {
     )
     expect(summary.elapsedDays).toBe(26)
     expect(summary.averageExpensePerDayKopecks).toBe(1_000)
+    expect(summary.trend).toHaveLength(26)
+    expect(summary.trend[0]).toEqual({ date: '2026-08-01', incomeKopecks: 0, expenseKopecks: 0 })
+    expect(summary.trend[4]).toEqual({ date: '2026-08-05', incomeKopecks: 0, expenseKopecks: 26_000 })
   })
 
   it('не падает на длинном журнале при поиске максимума', () => {

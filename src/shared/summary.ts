@@ -1,10 +1,42 @@
 import { endOfMonth, startOfMonth } from 'date-fns'
 import type { CategoryView, DashboardSummary, TransactionView } from './contracts.js'
-import { zonedDateKey, zonedDayNumber } from './timezone.js'
+import { zonedDateKey, zonedDayNumber, zonedParts } from './timezone.js'
 import { DATA_COLORS } from './design-tokens.js'
 
 export function periodForMonth(date = new Date()) {
   return { start: startOfMonth(date), end: endOfMonth(date) }
+}
+
+export type SummaryTrendPoint = { date: string; incomeKopecks: number; expenseKopecks: number }
+
+/**
+ * A missing bucket means zero recorded money, not "omit this day from the
+ * average". Materialise every elapsed calendar bucket in the user's timezone.
+ */
+export function fillTrendBuckets(
+  points: SummaryTrendPoint[],
+  range: { start: Date; end: Date },
+  cutoff: Date,
+  granularity: 'day' | 'month',
+  timeZone: string,
+): SummaryTrendPoint[] {
+  const effectiveEnd = cutoff < range.end ? cutoff : range.end
+  if (effectiveEnd < range.start) return []
+  const byKey = new Map(points.map((point) => [point.date, point]))
+  const keys: string[] = []
+  if (granularity === 'day') {
+    const startDay = zonedDayNumber(range.start, timeZone)
+    const endDay = zonedDayNumber(effectiveEnd, timeZone)
+    for (let day = startDay; day <= endDay; day += 1) keys.push(new Date(day * 86_400_000).toISOString().slice(0, 10))
+  } else {
+    const start = zonedParts(range.start, timeZone)
+    const end = zonedParts(effectiveEnd, timeZone)
+    for (let year = start.year, month = start.month; year < end.year || (year === end.year && month <= end.month); month += 1) {
+      if (month === 13) { year += 1; month = 1 }
+      keys.push(`${year}-${String(month).padStart(2, '0')}`)
+    }
+  }
+  return keys.map((date) => byKey.get(date) ?? { date, incomeKopecks: 0, expenseKopecks: 0 })
 }
 
 /**
@@ -139,8 +171,8 @@ export function calculateSummary(
         }
       })
       .sort((left, right) => right.amountKopecks - left.amountKopecks),
-    trend: [...dayTotals.entries()]
+    trend: fillTrendBuckets([...dayTotals.entries()]
       .map(([day, totals]) => ({ date: day, ...totals }))
-      .sort((left, right) => left.date.localeCompare(right.date)),
+      .sort((left, right) => left.date.localeCompare(right.date)), range, cutoff, byMonth ? 'month' : 'day', timeZone),
   }
 }

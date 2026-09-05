@@ -115,6 +115,7 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
               />
             </Suspense>
           </div>
+          {kind === 'line' && <p className="analytics-method-note">Среднее считается по всем календарным {data.summary.granularity === 'month' ? 'месяцам' : 'дням'} периода; интервалы без операций равны нулю. Полнота зависит от внесённых операций.</p>}
 
           {showsBothDirections
             ? <div className="analytics-totals"><span className="income"><ArrowDownLeft />{money(income.totalKopecks)}</span><span className="expense"><ArrowUpRight />{money(expense.totalKopecks)}</span></div>

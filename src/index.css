@@ -1090,6 +1090,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .analytics-donut-center small { color: var(--muted); font-size: var(--font-size-10-5); }
 .analytics-donut-center strong { margin-top: 3px; font-size: var(--font-size-21); font-weight: var(--font-weight-emphasis); letter-spacing: -.3px; }
 .analytics-sankey { width: 100%; height: 300px; margin-top: 22px; display: block; }
+.analytics-method-note { margin: -2px 18px 12px; color: var(--muted); font-size: var(--font-size-10-5); line-height: 1.35; text-align: center; }
 
 .analytics-totals { margin-top: 12px; display: flex; justify-content: center; gap: 10px; }
 .analytics-totals span {

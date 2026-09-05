@@ -19,7 +19,7 @@ import { useSwipeToDelete } from './features/motion/useSwipeToDelete'
 import { AnalyticsPage } from './features/analytics/AnalyticsPage'
 import { fromKopecks, initialCalc, pressKey, resolveKopecks, type CalcKey } from './features/editor/calculator'
 import { formatOperationDateLabel, fromLocalDateTimeInput, toLocalDateTimeInput } from './features/editor/datetime'
-import { hasReliableInsightSample, savedIncomePercent } from './features/insights/reliability'
+import { hasReliableInsightSample, hasReliableRunwaySample, MIN_RUNWAY_OBSERVATION_DAYS, MIN_RUNWAY_OPERATIONS, savedIncomePercent } from './features/insights/reliability'
 import { CategoriesPage } from './features/categories/CategoriesPage'
 import { byUsage } from './features/categories/ordering'
 import { SettingsPage } from './features/settings/SettingsPage'
@@ -517,6 +517,7 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
   // The bar under the balance shows how much of the income survived the period, so
   // it has to be driven by that number rather than a fixed split.
   const insightsReliable = hasReliableInsightSample(data.summary.observedDayCount)
+  const runwayReliable = hasReliableRunwaySample(data.summary.observedDayCount, data.summary.operationCount, data.summary.expenseKopecks)
   const savedShare = savedIncomePercent(data.summary.incomeKopecks, data.summary.expenseKopecks, data.summary.netKopecks)
   const savingLabel = !insightsReliable
     ? 'Пока мало данных'
@@ -526,7 +527,7 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
       : 'Расходы без дохода'
     : `Сохранено ${savedShare}% дохода`
   return <div className="insights-screen"><button type="button" className="close-orb insights-back" aria-label="Назад" onClick={onClose}><ChevronLeft /></button><div className="insights-balance"><PeriodPill value={period} onChange={setPeriod} tone="frost" /><strong>{money(data.summary.netKopecks)}</strong><div className="saving-line" style={{ '--saved': `${savedShare}%` } as CSSProperties}><i /><span><HandCoins />{savingLabel}</span></div></div><Suspense fallback={<section className="insights-chart placeholder" />}><InsightsChart trend={trend} daysInMonth={bucketCount} cutoffDay={cutoffDay} maximum={chartMaximum} ticks={chartTicks} totalKopecks={data.summary.expenseKopecks} /></Suspense><section className="insight-tiles">
-      <InsightTile title="Средние траты в день" icon={<CalendarDays />} sign="out" value={moneyExact(data.summary.averageExpensePerDayKopecks)} />
+      <InsightTile title="Средние траты в день" icon={<CalendarDays />} sign="out" note={`За ${data.summary.elapsedDays} календарных ${plural(data.summary.elapsedDays, 'день', 'дня', 'дней')}; дни без операций = 0. Полнота зависит от учёта.`} value={moneyExact(data.summary.averageExpensePerDayKopecks)} />
       <InsightTile title="Самая большая трата" note={largestExpenseCategory?.name || 'Без категории'} value={money(data.summary.largestExpenseKopecks)} tone="warm">
         {largestExpenseCategory
           ? <span className="tile-category" style={tileStyle(largestExpenseCategory.color)}><CategoryGlyph icon={largestExpenseCategory.icon} /></span>
@@ -542,7 +543,7 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
       <InsightTile title="Траты в выходные" icon={<Umbrella />} note={insightsReliable ? `${data.summary.weekendExpenseSharePercent}% трат приходится на выходные` : 'Пока мало данных'} value={insightsReliable ? `${data.summary.weekendExpenseSharePercent}%` : '—'} />
       <InsightTile title="Количество операций" note="Операций за выбранный период" value={String(data.summary.operationCount)} />
       <InsightTile title="Самая частая категория" note={mostFrequentExpenseCategory?.name || 'Без категории'} value={String(data.summary.mostFrequentExpenseCategoryCount)} icon={mostFrequentExpenseCategory ? <span className="tile-category" style={tileStyle(mostFrequentExpenseCategory.color)}><CategoryGlyph icon={mostFrequentExpenseCategory.icon} /></span> : <span className="tile-category neutral"><CircleSlash2 /></span>} />
-      <InsightTile title="Подушка безопасности" icon={<RectangleHorizontal className="safe" />} note={`Текущих средств хватит на ${runway} мес. расходов`} value={runway} />
+      <InsightTile title="Подушка безопасности" icon={<RectangleHorizontal className="safe" />} note={runwayReliable ? `Текущих средств хватит примерно на ${runway} мес. при текущем темпе` : `Нужно не менее ${MIN_RUNWAY_OBSERVATION_DAYS} дней и ${MIN_RUNWAY_OPERATIONS} операций учёта`} value={runwayReliable ? runway : '—'} />
     </section></div>
 }
 
