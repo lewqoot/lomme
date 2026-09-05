@@ -20,4 +20,11 @@ describe('буфер обмена на iPhone', () => {
     await expect(copyText('personal-key')).resolves.toBe(true)
     expect(writeText).toHaveBeenCalledWith('personal-key')
   })
+
+  it('честно сообщает отказ, если оба способа копирования недоступны', async () => {
+    vi.stubGlobal('window', {})
+    vi.stubGlobal('navigator', {})
+
+    await expect(copyText('summary')).resolves.toBe(false)
+  })
 })

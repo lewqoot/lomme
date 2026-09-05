@@ -99,9 +99,8 @@ export default function App() {
   const snapshot = useQuery<AppSnapshot>({
     queryKey: snapshotKey,
     enabled: auth.isSuccess && !launchInviteToken,
-    // Keeping the previous window on screen is what stops the layout collapsing to
-    // an empty skeleton every time an arrow is tapped.
-    placeholderData: (previous) => previous,
+    // Do not put a new period label over figures from the previous query. A
+    // deliberate loading state is honest even on a slow mobile connection.
     queryFn: () => {
       const query = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() })
       if (workspaceId) query.set('workspaceId', workspaceId)
@@ -284,7 +283,11 @@ export default function App() {
       setPeriod={setPeriod}
       onClose={goBack}
       glyph={(icon) => <CategoryGlyph icon={icon ?? undefined} />}
-      onShare={(text) => { void navigator.clipboard?.writeText(text); haptic('success'); setToast({ text: 'Сводка скопирована' }) }}
+      onShare={async (text) => {
+        const copied = await copyText(text)
+        if (copied) haptic('success')
+        setToast({ text: copied ? 'Сводка скопирована' : 'Не удалось скопировать сводку' })
+      }}
     />}
     {navigation.page === 'accounts' && <AccountsPage data={data} workspace={activeWorkspace} onSelect={async (nextWorkspaceId, nextAccountId) => { await selectAccount(nextWorkspaceId, nextAccountId); goBack() }} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
     {navigation.page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} onEdit={(editor) => dispatchNavigation({ type: 'open-editor', editor: { mode: 'edit', transaction: editor } })} onClose={goBack} periodLabel={range.label} />}

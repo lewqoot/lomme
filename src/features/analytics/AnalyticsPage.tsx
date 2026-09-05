@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ArrowDownLeft, ArrowUpRight, ChartColumnBig, ChartLine, ChartPie, ChevronLeft, SquareArrowUp, Waypoints } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, ChartColumnBig, ChartLine, ChartPie, ChevronLeft, LoaderCircle, SquareArrowUp, Waypoints } from 'lucide-react'
 import { MenuItem } from '../../components/AnchoredMenu'
 import { useAnchoredMenu } from '../../components/useAnchoredMenu'
 import { PeriodPill } from '../period/PeriodPill'
@@ -23,11 +23,13 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
   setPeriod(next: PeriodSelection): void
   onClose(): void
   glyph(icon: string | null | undefined): ReactNode
-  onShare(text: string): void
+  onShare(text: string): Promise<void>
 }) {
   const [type, setType] = useState<AnalyticsType>('expense')
   const [kind, setKind] = useState<ChartKind>('donut')
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set())
+  const [sharing, setSharing] = useState(false)
+  const sharingRef = useRef(false)
   const chartAnchor = useRef<HTMLDivElement>(null)
   const chartMenu = useAnchoredMenu(chartAnchor)
 
@@ -71,9 +73,17 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
     [...excluded].sort().join(','),
   ].join(':')
 
-  const share = () => {
+  const share = async () => {
+    if (sharingRef.current) return
+    sharingRef.current = true
+    setSharing(true)
     const lines = visible.map((item) => `${item.name}: ${money(item.amountKopecks)}`)
-    onShare([`${type === 'income' ? 'Доходы' : 'Расходы'}: ${money(totalKopecks)}`, ...lines].join('\n'))
+    try {
+      await onShare([`${type === 'income' ? 'Доходы' : 'Расходы'}: ${money(totalKopecks)}`, ...lines].join('\n'))
+    } finally {
+      sharingRef.current = false
+      setSharing(false)
+    }
   }
 
   return <div className="analytics-screen">
@@ -82,7 +92,7 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
       <div className="account-pill static"><span className="account-icon">{glyph(account?.icon)}</span><span><strong>{account?.name}</strong><small>{money(account?.balanceKopecks || 0)}</small></span></div>
       <div className="analytics-tools" ref={chartAnchor}>
         <button type="button" aria-label="Тип диаграммы" aria-haspopup="menu" aria-expanded={chartMenu.open} onClick={() => { haptics.selection(); chartMenu.toggle() }}>{CHART_ICON[kind]}</button>
-        <button type="button" aria-label="Поделиться" onClick={share}><SquareArrowUp /></button>
+        <button type="button" aria-label="Поделиться" disabled={sharing} onClick={() => { void share() }}>{sharing ? <LoaderCircle className="spin" /> : <SquareArrowUp />}</button>
         {chartMenu.render(CHART_KINDS.map((item) => <MenuItem key={item.kind} checked={item.kind === kind} onSelect={() => { haptics.selection(); chartMenu.close(); setKind(item.kind) }}>{item.label}</MenuItem>))}
       </div>
     </header>

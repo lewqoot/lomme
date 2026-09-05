@@ -117,24 +117,42 @@ function weekdaySummary(days: number[]) {
 function NotificationsScreen({ motion, onBack, notify }: { motion: string; onBack(): void; notify(text: string): void }) {
   const [settings, setSettings] = useState<ReminderSettings | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
+  const confirmed = useRef<ReminderSettings | null>(null)
+  const saving = useRef(false)
 
   useEffect(() => {
-    let cancelled = false
-    api<ReminderSettings>('/reminders')
-      .then((value) => { if (!cancelled) setSettings(value) })
-      .catch(() => { if (!cancelled) setLoadFailed(true) })
-    return () => { cancelled = true }
+    const controller = new AbortController()
+    api<ReminderSettings>('/reminders', { signal: controller.signal })
+      .then((value) => { if (!controller.signal.aborted) { confirmed.current = value; setSettings(value) } })
+      .catch(() => { if (!controller.signal.aborted) setLoadFailed(true) })
+    return () => controller.abort()
   }, [])
 
   const save = useMutation({
     mutationFn: (next: ReminderSettings) => api<ReminderSettings>('/reminders', { method: 'PATCH', body: JSON.stringify(next) }),
-    onSuccess: (saved) => setSettings(saved),
-    onError: (error) => notify(error instanceof ApiError ? error.message : 'Не удалось сохранить'),
+    onSuccess: (saved) => { confirmed.current = saved; setSettings(saved) },
+    onError: async (error) => {
+      // A timed-out PATCH may have reached the server. Read back the source of
+      // truth instead of pretending the optimistic switch is either saved or
+      // rolled back based only on the missing response.
+      try {
+        const actual = await api<ReminderSettings>('/reminders')
+        confirmed.current = actual
+        setSettings(actual)
+        notify(error instanceof ApiError ? `${error.message}. Настройки обновлены с сервера` : 'Не удалось сохранить. Настройки обновлены с сервера')
+      } catch {
+        setSettings(confirmed.current)
+        notify('Не удалось сохранить. Изменение отменено')
+      }
+    },
+    onSettled: () => { saving.current = false },
   })
 
   // The screen shows the change at once and the request follows. Waiting for a
   // round trip to move a switch feels broken on a phone.
   const apply = (next: ReminderSettings) => {
+    if (saving.current) return
+    saving.current = true
     haptic()
     setSettings(next)
     save.mutate(next)
@@ -157,7 +175,7 @@ function NotificationsScreen({ motion, onBack, notify }: { motion: string; onBac
 
     {settings && <>
       <SettingsSection title="Сообщения в чате">
-        <button className="settings-row" type="button" onClick={() => apply({ ...settings, enabled: !settings.enabled })}>
+        <button className="settings-row" type="button" disabled={save.isPending} onClick={() => apply({ ...settings, enabled: !settings.enabled })}>
           <span className="settings-row-icon"><Bell /></span>
           <strong>Напоминания и сводки</strong>
           <em><span className={`fake-toggle${settings.enabled ? ' on' : ''}`} aria-hidden="true"><b /></span></em>
@@ -180,6 +198,7 @@ function NotificationsScreen({ motion, onBack, notify }: { motion: string; onBac
                 className="reminder-time"
                 type="time"
                 value={settings.localTime}
+                disabled={save.isPending}
                 onChange={(event) => { if (event.target.value) apply({ ...settings, localTime: event.target.value }) }}
               />
             </em>
@@ -195,11 +214,13 @@ function NotificationsScreen({ motion, onBack, notify }: { motion: string; onBac
               type="button"
               className={`reminder-day${active ? ' active' : ''}`}
               aria-pressed={active}
+              disabled={save.isPending}
               onClick={() => toggleDay(item.day)}
             >{item.short}</button>
           })}
         </div>
-        {settings.daysOfWeek.length < 7 && <button className="reminder-reset" type="button" onClick={() => apply({ ...settings, daysOfWeek: EVERY_DAY })}>Каждый день</button>}
+        {settings.daysOfWeek.length < 7 && <button className="reminder-reset" type="button" disabled={save.isPending} onClick={() => apply({ ...settings, daysOfWeek: EVERY_DAY })}>Каждый день</button>}
+        {save.isPending && <p className="reminder-note" role="status"><LoaderCircle className="spin" /> Сохраняем настройки…</p>}
       </>}
     </>}
   </div>
