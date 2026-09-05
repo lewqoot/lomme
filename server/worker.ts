@@ -1,6 +1,7 @@
 import { createStore } from './store/index.js'
 import { runDeliveries } from './telegram/delivery.js'
 import { botToken, botUsernameFromEnv } from './telegram/api.js'
+import { releaseIdentity } from './lib/release.js'
 
 const store = await createStore()
 try {
@@ -17,7 +18,7 @@ try {
   const reminders = botToken()
     ? await runDeliveries(store, new Date(), links)
     : { sent: 0, skipped: 0, failed: 0, revoked: 0 }
-  console.info(JSON.stringify({ event: 'worker_batch_complete', ...housekeeping, reminders }))
+  console.info(JSON.stringify({ event: 'worker_batch_complete', release: releaseIdentity('worker'), ...housekeeping, reminders }))
 } finally {
   await store.close()
 }

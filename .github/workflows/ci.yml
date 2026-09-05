@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lomme
+          POSTGRES_PASSWORD: lomme
+          POSTGRES_DB: lomme_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lomme -d lomme_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: true
+      CI_POSTGRES_SMOKE: true
+      DATABASE_URL: postgresql://lomme:lomme@127.0.0.1:5432/lomme_ci
+      APP_URL: https://ci.lomme.invalid
+      RELEASE_SHA: ${{ github.sha }}
+      RELEASE_VERSION: 0.0.0
+      TELEGRAM_BOT_USERNAME: lomme_ci_bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Use locked npm version
+        run: npm install --global npm@11.17.0
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Apply every migration to an empty PostgreSQL database
+        run: npm run db:migrate
+      - name: Typecheck, lint, test and build
+        run: npm run verify
+      - name: Build reproducible release manifest
+        run: |
+          npm run release:manifest
+          cp dist-release/release-manifest.json /tmp/release-manifest.json
+          npm run release:manifest
+          cmp /tmp/release-manifest.json dist-release/release-manifest.json
+      - name: Smoke API role and verify its commit
+        run: |
+          NODE_ENV=production PORT=3000 npm start > /tmp/lomme-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/readyz > /tmp/readyz.json; then break; fi
+            sleep 1
+          done
+          jq --exit-status --arg sha "$GITHUB_SHA" \
+            '.ready == true and .release.role == "api" and .release.sha == $sha and .migrations.applied == .migrations.expected' \
+            /tmp/readyz.json
+      - name: Smoke worker role and verify its commit
+        run: |
+          NODE_ENV=production npm run worker | tee /tmp/lomme-worker.log
+          jq --exit-status --arg sha "$GITHUB_SHA" \
+            'select(.event == "worker_batch_complete") | .release.role == "worker" and .release.sha == $sha' \
+            /tmp/lomme-worker.log
+      - name: Upload exact release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: lomme-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist
+            dist-server
+            dist-release/release-manifest.json

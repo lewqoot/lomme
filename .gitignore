@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-server
+dist-release
 dist-design
 dist-ssr
 dist-shortcut

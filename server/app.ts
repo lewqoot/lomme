@@ -33,6 +33,7 @@ import { answerCallbackQuery, editMessage, sendMessage } from './telegram/api.js
 import { accountInviteAccepted } from './telegram/texts.js'
 import { confirmation as confirmationFor, routeUpdate, type TelegramUpdate } from './telegram/router.js'
 import { AppError } from './lib/errors.js'
+import { releaseIdentity } from './lib/release.js'
 import { ensureSameOrigin } from './lib/security.js'
 import type { FinanceStore, SessionUser } from './store/types.js'
 
@@ -239,14 +240,14 @@ export async function buildApp(store: FinanceStore) {
   // the right answer to a database that is merely slow.
   app.get('/healthz', async (_request, reply) => {
     const state = await store.health()
-    return reply.send({ ok: true, service: 'lomme', ...state, now: new Date().toISOString() })
+    return reply.send({ ok: true, service: 'lomme', release: releaseIdentity('api'), ...state, now: new Date().toISOString() })
   })
 
   // Readiness: this build may serve traffic. Answers 503 while the schema is
   // behind, so a deploy whose migration step failed cannot be reported green.
   app.get('/readyz', async (_request, reply) => {
     const state = await store.readiness()
-    return reply.code(state.ready ? 200 : 503).send({ ...state, service: 'lomme', now: new Date().toISOString() })
+    return reply.code(state.ready ? 200 : 503).send({ ...state, service: 'lomme', release: releaseIdentity('api'), now: new Date().toISOString() })
   })
 
   // Keep the tap on a normal same-origin HTTPS link so Telegram's iOS WebView

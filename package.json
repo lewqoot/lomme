@@ -23,6 +23,10 @@
     "lint": "oxlint src server tests",
     "preview": "vite preview",
     "build:design": "vite build --config vite.design.config.ts",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build && npm run build:design",
+    "release:clean": "node scripts/require-clean-tree.mjs",
+    "release:manifest": "node scripts/release-manifest.mjs",
+    "release:prepare": "npm run release:clean && npm ci && npm run verify && npm run release:manifest",
     "deploy:design": "npm run build:design && railway up ./dist-design --path-as-root --service design-preview --environment production --detach -m \"Design preview\""
   },
   "dependencies": {
