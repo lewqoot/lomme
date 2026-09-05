@@ -11,12 +11,13 @@ type Props = {
   data: AppSnapshot
   glyph(icon?: string): ReactNode
   onEdit(transaction: TransactionView): void
+  readOnly?: boolean
   onClose(): void
   /** Search runs over the loaded window, so the screen has to name it. */
   periodLabel: string
 }
 
-export function SearchPage({ data, glyph, onEdit, onClose, periodLabel }: Props) {
+export function SearchPage({ data, glyph, onEdit, onClose, periodLabel, readOnly = false }: Props) {
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -51,7 +52,7 @@ export function SearchPage({ data, glyph, onEdit, onClose, periodLabel }: Props)
         <h2>{dayTitle(parseISO(date))}{isSameDay(parseISO(date), new Date()) ? ' — Сегодня' : ''}</h2>
         <div className="operation-list">{items.map((item) => {
           const category = categories.get(item.categoryId || '')
-          return <button className="operation-row search-operation-row" type="button" key={item.id} onClick={() => onEdit(item)}>
+          return <button className="operation-row search-operation-row" type="button" key={item.id} disabled={readOnly} onClick={() => onEdit(item)}>
             <span className="category-icon" style={tileStyle(category?.color)}>{item.type === 'transfer' ? <ArrowRightLeft /> : glyph(category?.icon)}</span>
             <span className="operation-copy"><strong>{category?.name || (item.type === 'transfer' ? 'Перевод' : 'Без категории')}</strong>{item.note && <small>{item.note}</small>}</span>
             <strong className={item.type}>{item.type === 'income' ? '+' : item.type === 'expense' ? '−' : ''}{money(item.amountKopecks)}</strong>

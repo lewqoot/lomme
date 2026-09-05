@@ -317,6 +317,7 @@ export async function buildApp(store: FinanceStore) {
   app.post('/api/v1/accounts', { preHandler: requireUser }, async (request, reply) => reply.code(201).send(await store.createAccount(request.currentUser!.id, parse(createAccountSchema, request.body))))
   app.put('/api/v1/accounts/:id', { preHandler: requireUser }, async (request, reply) => { const { id } = parseId(request.params); await store.updateAccount(request.currentUser!.id, id, parse(updateAccountSchema, request.body)); return reply.code(204).send() })
   app.delete('/api/v1/accounts/:id', { preHandler: requireUser }, async (request, reply) => { const { id } = parseId(request.params); const version = Number((request.query as { version?: string }).version); await store.archiveAccount(request.currentUser!.id, id, version); return reply.code(204).send() })
+  app.post('/api/v1/accounts/:id/restore', { preHandler: requireUser }, async (request, reply) => { const { id } = parseId(request.params); const version = Number((request.query as { version?: string }).version); await store.restoreAccount(request.currentUser!.id, id, version); return reply.code(204).send() })
   app.put('/api/v1/me/active-account', { preHandler: requireUser }, async (request, reply) => { await store.setActiveAccount(request.currentUser!.id, parse(activeAccountSchema, request.body)); return reply.code(204).send() })
   app.post('/api/v1/accounts/:id/invites', { preHandler: requireUser, config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (request, reply) => {
     const { id } = parseId(request.params)

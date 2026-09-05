@@ -94,7 +94,7 @@ describe('wallet selection and sharing', () => {
     const aggregate = (await app.inject({ method: 'GET', url: `/api/v1/snapshot?workspaceId=${before.activeWorkspaceId}&accountId=all`, headers: { cookie: owner.cookie } })).json()
     const temporary = aggregate.accounts.find((item: { id: string }) => item.id === created.id)
     expect((await app.inject({ method: 'DELETE', url: `/api/v1/accounts/${temporary.id}?version=${temporary.version}`, headers: { cookie: owner.cookie } })).statusCode).toBe(204)
-    expect((await app.inject({ method: 'GET', url: '/api/v1/snapshot', headers: { cookie: owner.cookie } })).json().accounts.some((item: { id: string }) => item.id === temporary.id)).toBe(false)
+    expect((await app.inject({ method: 'GET', url: '/api/v1/snapshot', headers: { cookie: owner.cookie } })).json().accounts.find((item: { id: string }) => item.id === temporary.id).archivedAt).toBeTruthy()
   })
 
   it('берёт имя бота из Telegram getMe, а не из ошибочного fallback', async () => {

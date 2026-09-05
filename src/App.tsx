@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BriefcaseBusiness, CalendarDays,
   Check, ChevronLeft, CircleSlash2, Trash2,
-  HandCoins, LoaderCircle, Pencil, PieChart as PieChartIcon, Plus, ReceiptText,
+  HandCoins, LoaderCircle, Pencil, PieChart as PieChartIcon, Plus, ReceiptText, RotateCcw,
   Flame, RectangleHorizontal, Search, Settings, ShoppingBag, Umbrella, UserMinus, UserPlus, Users, WalletCards
 } from 'lucide-react'
 import { differenceInCalendarDays, differenceInCalendarMonths, format, isSameDay, parseISO } from 'date-fns'
@@ -154,6 +154,11 @@ export default function App() {
     setExpandedJournalKey(null)
     await queryClient.invalidateQueries({ queryKey: ['snapshot'] })
   }, [queryClient])
+  const viewArchivedAccount = useCallback((nextWorkspaceId: string, nextAccountId: string) => {
+    setWorkspaceId(nextWorkspaceId)
+    setAccountId(nextAccountId)
+    setExpandedJournalKey(null)
+  }, [])
   const resetAccountScope = useCallback(() => {
     setWorkspaceId(undefined)
     setAccountId(undefined)
@@ -190,7 +195,10 @@ export default function App() {
   useEffect(() => setBackButton(false, () => {}), [])
 
   const activeWorkspace = data?.workspaces.find((item) => item.id === data.activeWorkspaceId)
-  const totalBalance = (data?.accounts || []).filter((item) => !item.archivedAt && item.workspaceId === data?.activeWorkspaceId && (!data?.activeAccountId || item.id === data.activeAccountId)).reduce((sum, item) => sum + item.balanceKopecks, 0)
+  const selectedAccount = data?.activeAccountId ? data.accounts.find((item) => item.id === data.activeAccountId) : null
+  const totalBalance = selectedAccount?.archivedAt
+    ? selectedAccount.balanceKopecks
+    : (data?.accounts || []).filter((item) => !item.archivedAt && item.workspaceId === data?.activeWorkspaceId && (!data?.activeAccountId || item.id === data.activeAccountId)).reduce((sum, item) => sum + item.balanceKopecks, 0)
   const requestMoreTransactions = () => {
     if (!data?.transactionsNextCursor || loadMore.isPending) return
     haptic()
@@ -286,8 +294,8 @@ export default function App() {
       glyph={(icon) => <CategoryGlyph icon={icon ?? undefined} />}
       onShare={(text) => { void navigator.clipboard?.writeText(text); haptic('success'); setToast({ text: 'Сводка скопирована' }) }}
     />}
-    {navigation.page === 'accounts' && <AccountsPage data={data} workspace={activeWorkspace} onSelect={async (nextWorkspaceId, nextAccountId) => { await selectAccount(nextWorkspaceId, nextAccountId); goBack() }} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
-    {navigation.page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} onEdit={(editor) => dispatchNavigation({ type: 'open-editor', editor: { mode: 'edit', transaction: editor } })} onClose={goBack} periodLabel={range.label} />}
+    {navigation.page === 'accounts' && <AccountsPage data={data} workspace={activeWorkspace} onSelect={async (nextWorkspaceId, nextAccountId) => { await selectAccount(nextWorkspaceId, nextAccountId); goBack() }} onViewArchived={(nextWorkspaceId, nextAccountId) => { viewArchivedAccount(nextWorkspaceId, nextAccountId); goBack() }} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
+    {navigation.page === 'search' && <SearchPage data={data} glyph={(icon) => <CategoryGlyph icon={icon} />} readOnly={Boolean(selectedAccount?.archivedAt)} onEdit={(editor) => dispatchNavigation({ type: 'open-editor', editor: { mode: 'edit', transaction: editor } })} onClose={goBack} periodLabel={range.label} />}
     {navigation.page === 'family' && <FamilyPage data={data} onSelect={selectAccount} onResetScope={resetAccountScope} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
     {navigation.page === 'settings' && <SettingsPage backRef={settingsBackRef} notify={(text) => setToast({ text })} onNavigate={navigate} onClose={goBack} initialScreen={settingsEntry} />}
     {navigation.page === 'categories' && <CategoriesPage data={data} onRefresh={refresh} notify={(text) => setToast({ text })} onClose={goBack} />}
@@ -377,30 +385,32 @@ function HomeLayer({ data, totalBalance, period, setPeriod, receding, onEditor, 
   onLoadMore(): void; loadingMore: boolean
 }) {
   const [pullRef, pullProgress] = usePullToOpen(onInsights)
+  const readOnly = Boolean(data.activeAccountId && data.accounts.find((item) => item.id === data.activeAccountId)?.archivedAt)
   return <div
     ref={pullRef}
     className={`home-layer${receding ? ' receding' : ''}${pullProgress > 0 ? ' pulling' : ''}`}
     style={{ '--pull': pullProgress } as CSSProperties}
   >
     <Header data={data} totalBalance={totalBalance} onSearch={() => onNavigate('search')} onSettings={() => onNavigate('settings')} onAnalytics={() => onNavigate('analytics')} onAccounts={() => onNavigate('accounts')} />
-    <HomePage data={data} period={period} setPeriod={setPeriod} onEditor={onEditor} onInsights={onInsights} onDelete={onDelete} onLoadMore={onLoadMore} loadingMore={loadingMore} pull={pullProgress} finishGift={receding} />
-    <FloatingActions onAdd={() => onEditor({ mode: 'create', type: 'expense' })} />
+    {readOnly && <div className="archive-readonly-note">Архив · только просмотр</div>}
+    <HomePage data={data} period={period} setPeriod={setPeriod} onEditor={onEditor} onInsights={onInsights} onDelete={onDelete} onLoadMore={onLoadMore} loadingMore={loadingMore} pull={pullProgress} finishGift={receding} readOnly={readOnly} />
+    {!readOnly && <FloatingActions onAdd={() => onEditor({ mode: 'create', type: 'expense' })} />}
   </div>
 }
 
 function Header({ data, totalBalance, onSearch, onSettings, onAnalytics, onAccounts }: { data: AppSnapshot; totalBalance: number; onSearch(): void; onSettings(): void; onAnalytics(): void; onAccounts(): void }) {
   const activeAccount = data.activeAccountId ? data.accounts.find((item) => item.id === data.activeAccountId) : null
   const shared = Boolean(activeAccount && activeAccount.memberCount > 1)
-  return <header className="topbar"><button className={`account-pill workspace-picker${shared ? ' shared' : ''}`} onClick={onAccounts}><span className="account-icon"><WalletCards size={20} />{shared && <span className="shared-wallet-badge" aria-label="Общий кошелёк"><Users /></span>}</span><span><strong>{activeAccount?.name || 'Все счета'}</strong><small>{money(totalBalance)}{shared ? ` · Общий · ${activeAccount!.memberCount}` : ''}</small></span></button><div className="header-actions"><button aria-label="Поиск" onClick={onSearch}><Search /></button><button aria-label="Аналитика" onPointerDown={warmAnalyticsChart} onClick={onAnalytics}><PieChartIcon /></button></div><button className="icon-button glass" type="button" aria-label="Настройки" onClick={onSettings}><Settings size={22} /></button></header>
+  return <header className="topbar"><button className={`account-pill workspace-picker${shared ? ' shared' : ''}`} onClick={onAccounts}><span className="account-icon"><WalletCards size={20} />{shared && <span className="shared-wallet-badge" aria-label="Общий кошелёк"><Users /></span>}</span><span><strong>{activeAccount?.name || 'Все счета'}</strong><small>{activeAccount?.archivedAt ? 'Архив · ' : ''}{money(totalBalance)}{shared ? ` · Общий · ${activeAccount!.memberCount}` : ''}</small></span></button><div className="header-actions"><button aria-label="Поиск" onClick={onSearch}><Search /></button><button aria-label="Аналитика" onPointerDown={warmAnalyticsChart} onClick={onAnalytics}><PieChartIcon /></button></div><button className="icon-button glass" type="button" aria-label="Настройки" onClick={onSettings}><Settings size={22} /></button></header>
 }
 
 const OPERATIONS_PAGE_SIZE = 20
 
-function HomePage({ data, period, setPeriod, onEditor, onInsights, onDelete, onLoadMore, loadingMore, pull = 0, finishGift = false }: { data: AppSnapshot; period: PeriodSelection; setPeriod(next: PeriodSelection): void; onEditor(state: EditorState): void; onInsights(): void; onDelete(item: TransactionView): void; onLoadMore(): void; loadingMore: boolean; pull?: number; finishGift?: boolean }) {
+function HomePage({ data, period, setPeriod, onEditor, onInsights, onDelete, onLoadMore, loadingMore, pull = 0, finishGift = false, readOnly = false }: { data: AppSnapshot; period: PeriodSelection; setPeriod(next: PeriodSelection): void; onEditor(state: EditorState): void; onInsights(): void; onDelete(item: TransactionView): void; onLoadMore(): void; loadingMore: boolean; pull?: number; finishGift?: boolean; readOnly?: boolean }) {
   const grouped = useMemo(() => { const map = new Map<string, TransactionView[]>(); data.transactions.forEach((item) => { const key = format(parseISO(item.occurredAt), 'yyyy-MM-dd'); map.set(key, [...(map.get(key) || []), item]) }); return [...map.entries()] }, [data.transactions])
   const categoryMap = new Map(data.categories.map((item) => [item.id, item]))
   return <><section className="balance-card"><div className="balance-period"><span>Баланс за</span><PeriodPill value={period} onChange={setPeriod} /></div><h1>{money(data.summary.netKopecks)}</h1><div className="money-flow"><span className="income"><ArrowDownLeft size={15} />{money(data.summary.incomeKopecks)}</span><span className="expense"><ArrowUpRight size={15} />{money(data.summary.expenseKopecks)}</span></div><button className="insights-button" type="button" onPointerDown={warmInsightsChart} onClick={onInsights}><PullShape pull={pull} /><GiftMark progress={pull} finish={finishGift} /><span>Инсайты</span></button></section>
-    <section className="operations-section">{grouped.length === 0 ? <Empty icon={<ReceiptText />} title="Здесь появятся операции" text="Добавьте первый доход или расход — остатки и аналитика пересчитаются сразу." /> : <>{grouped.map(([date, items]) => <div className="day-group" key={date}><div className="section-heading"><h2>{`${dayTitle(parseISO(date))}${isSameDay(parseISO(date), new Date()) ? ' - Сегодня' : ''}`}</h2><span className={items.reduce((sum, item) => sum + (item.type === 'income' ? item.amountKopecks : item.type === 'expense' ? -item.amountKopecks : 0), 0) >= 0 ? 'positive' : ''}>{money(items.reduce((sum, item) => sum + (item.type === 'income' ? item.amountKopecks : item.type === 'expense' ? -item.amountKopecks : 0), 0), true)}</span></div><div className="operation-list">{items.map((item) => { const category = categoryMap.get(item.categoryId || ''); const account = data.accounts.find((candidate) => candidate.id === item.accountId); return <OperationRow key={item.id} item={item} category={category} shared={Boolean(account && account.memberCount > 1)} onOpen={() => onEditor({ mode: 'edit', transaction: item })} onDelete={() => onDelete(item)} /> })}</div></div>)}{data.transactionsNextCursor && <div className="load-more-row"><button className="secondary-button wide" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><LoaderCircle className="spin" />Загружаем</> : 'Показать ещё'}</button></div>}</>}</section></>
+    <section className="operations-section">{grouped.length === 0 ? <Empty icon={<ReceiptText />} title="Здесь появятся операции" text={readOnly ? 'В выбранном периоде архивного кошелька нет операций.' : 'Добавьте первый доход или расход — остатки и аналитика пересчитаются сразу.'} /> : <>{grouped.map(([date, items]) => <div className="day-group" key={date}><div className="section-heading"><h2>{`${dayTitle(parseISO(date))}${isSameDay(parseISO(date), new Date()) ? ' - Сегодня' : ''}`}</h2><span className={items.reduce((sum, item) => sum + (item.type === 'income' ? item.amountKopecks : item.type === 'expense' ? -item.amountKopecks : 0), 0) >= 0 ? 'positive' : ''}>{money(items.reduce((sum, item) => sum + (item.type === 'income' ? item.amountKopecks : item.type === 'expense' ? -item.amountKopecks : 0), 0), true)}</span></div><div className="operation-list">{items.map((item) => { const category = categoryMap.get(item.categoryId || ''); const account = data.accounts.find((candidate) => candidate.id === item.accountId); return <OperationRow key={item.id} item={item} category={category} shared={Boolean(account && account.memberCount > 1)} readOnly={readOnly} onOpen={() => onEditor({ mode: 'edit', transaction: item })} onDelete={() => onDelete(item)} /> })}</div></div>)}{data.transactionsNextCursor && <div className="load-more-row"><button className="secondary-button wide" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><LoaderCircle className="spin" />Загружаем</> : 'Показать ещё'}</button></div>}</>}</section></>
 }
 
 function FloatingActions({ onAdd }: { onAdd(): void }) {
@@ -414,21 +424,22 @@ function FloatingActions({ onAdd }: { onAdd(): void }) {
  * One journal row. Swiping it left uncovers a delete button; releasing past the
  * commit point removes the operation, which the Undo toast can still put back.
  */
-function OperationRow({ item, category, shared, onOpen, onDelete }: {
+function OperationRow({ item, category, shared, readOnly = false, onOpen, onDelete }: {
   item: TransactionView
   category?: AppSnapshot['categories'][number]
   shared: boolean
+  readOnly?: boolean
   onOpen(): void
   onDelete(): void
 }) {
-  const { row, offset, settling, revealed, close } = useSwipeToDelete(onDelete)
+  const { row, offset, settling, revealed, close } = useSwipeToDelete(onDelete, !readOnly)
   return <div
-    className={`operation-swipe${settling ? ' settling' : ''}${revealed ? ' revealed' : ''}`}
+    className={`operation-swipe${settling ? ' settling' : ''}${revealed ? ' revealed' : ''}${readOnly ? ' read-only' : ''}`}
     ref={row}
     style={{ '--swipe': `${offset}px`, '--swipe-progress': Math.min(offset / 92, 1) } as CSSProperties}
   >
-    <button type="button" className="operation-delete" aria-label="Удалить операцию" onClick={() => { close(); onDelete() }}><Trash2 /></button>
-    <button className="operation-row" type="button" onClick={() => (revealed ? close() : onOpen())}>
+    {!readOnly && <button type="button" className="operation-delete" aria-label="Удалить операцию" onClick={() => { close(); onDelete() }}><Trash2 /></button>}
+    <button className="operation-row" type="button" disabled={readOnly} onClick={() => (revealed ? close() : onOpen())}>
       <span className="category-icon" style={tileStyle(category?.color)}>{item.type === 'transfer' ? <ArrowRightLeft /> : <CategoryGlyph icon={category?.icon} />}</span>
       <span className="operation-copy">
         <span className="operation-heading">
@@ -508,7 +519,10 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
   const largestExpenseCategory = data.categories.find((item) => item.id === data.summary.largestExpenseCategoryId)
   const largestIncomeCategory = data.categories.find((item) => item.id === data.summary.largestIncomeCategoryId)
   const mostFrequentExpenseCategory = data.categories.find((item) => item.id === data.summary.mostFrequentExpenseCategoryId)
-  const balance = data.accounts.filter((item) => item.workspaceId === data.activeWorkspaceId && (!data.activeAccountId || item.id === data.activeAccountId)).reduce((sum, item) => sum + item.balanceKopecks, 0)
+  const selected = data.activeAccountId ? data.accounts.find((item) => item.id === data.activeAccountId) : null
+  const balance = selected?.archivedAt
+    ? selected.balanceKopecks
+    : data.accounts.filter((item) => !item.archivedAt && item.workspaceId === data.activeWorkspaceId && (!data.activeAccountId || item.id === data.activeAccountId)).reduce((sum, item) => sum + item.balanceKopecks, 0)
   const monthlyBurn = data.summary.expenseKopecks > 0
     ? data.summary.expenseKopecks / (data.summary.elapsedDays / 30.44)
     : 0
@@ -548,16 +562,18 @@ function InsightsPage({ data, period, setPeriod, onClose }: { data: AppSnapshot;
 
 type AccountSwitchProps = {
   onSelect(workspaceId: string, accountId: string | null): Promise<void>
+  onViewArchived?(workspaceId: string, accountId: string): void
   onResetScope(): void
 }
 
-function AccountsPage({ data, workspace, onSelect, onResetScope, onRefresh, notify, onClose }: ActionProps & AccountSwitchProps & { workspace?: AppSnapshot['workspaces'][number]; onClose(): void }) {
+function AccountsPage({ data, workspace, onSelect, onViewArchived, onResetScope, onRefresh, notify, onClose }: ActionProps & AccountSwitchProps & { workspace?: AppSnapshot['workspaces'][number]; onClose(): void }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [openingBalance, setOpeningBalance] = useState('0')
   const [editing, setEditing] = useState<AccountView | null>(null)
   const [editName, setEditName] = useState('')
   const activeAccounts = data.accounts.filter((item) => !item.archivedAt)
+  const archivedAccounts = data.accounts.filter((item) => item.archivedAt && item.accessRole === 'owner')
   const ownedAccounts = activeAccounts.filter((item) => item.accessRole === 'owner')
   const workspaceAccounts = activeAccounts.filter((item) => item.workspaceId === data.activeWorkspaceId)
   const total = workspaceAccounts.reduce((sum, item) => sum + item.balanceKopecks, 0)
@@ -583,6 +599,11 @@ function AccountsPage({ data, workspace, onSelect, onResetScope, onRefresh, noti
     onSuccess: () => { setEditing(null); onResetScope(); notify('Кошелёк удалён') },
     onError: (cause) => notify(cause instanceof Error ? cause.message : 'Не удалось удалить кошелёк'),
   })
+  const restore = useMutation({
+    mutationFn: (account: AccountView) => api(`/accounts/${account.id}/restore?version=${account.version}`, { method: 'POST', body: '{}' }),
+    onSuccess: async (_, account) => { notify('Кошелёк восстановлен'); await onSelect(account.workspaceId, account.id) },
+    onError: (cause) => notify(cause instanceof Error ? cause.message : 'Не удалось восстановить кошелёк'),
+  })
   return <div className="accounts-screen">
     <header className="centered-overlay-header"><button className="close-orb" type="button" aria-label="Назад" onClick={onClose}><ChevronLeft /></button><h1>Счета</h1>{workspace?.role === 'owner' ? <button className="action-orb" type="button" aria-label="Новый кошелёк" onClick={() => setOpen(!open)}><Plus /></button> : <span />}</header>
     {open && <InlineForm onSubmit={(event) => { event.preventDefault(); create.mutate() }}><Field label="Название"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Новый кошелёк" required /></Field><Field label="Начальный остаток, ₽"><input value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} inputMode="decimal" /></Field><Submit pending={create.isPending}>Создать кошелёк</Submit></InlineForm>}
@@ -600,6 +621,10 @@ function AccountsPage({ data, workspace, onSelect, onResetScope, onRefresh, noti
         </form>}
       </article>
     })}</div>
+    {archivedAccounts.length > 0 && <section className="accounts-archive"><h2>Архив</h2><div className="reference-account-list">{archivedAccounts.map((account) => <article className={`${account.id === data.activeAccountId ? 'active ' : ''}archived`} key={account.id}>
+      <button className="account-select" type="button" onClick={() => onViewArchived?.(account.workspaceId, account.id)}><span className="account-icon"><WalletCards /></span><span className="account-row-copy"><strong>{account.name}</strong><small>Операции доступны только для просмотра</small></span><b>{money(account.balanceKopecks)}</b>{account.id === data.activeAccountId && <Check className="account-selected-mark" />}</button>
+      <button className="account-restore" type="button" disabled={restore.isPending} aria-label={`Восстановить кошелёк ${account.name}`} onClick={() => restore.mutate(account)}>{restore.isPending && restore.variables?.id === account.id ? <LoaderCircle className="spin" /> : <RotateCcw />}</button>
+    </article>)}</div></section>}
   </div>
 }
 

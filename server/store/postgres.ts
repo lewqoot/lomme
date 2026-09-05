@@ -185,7 +185,7 @@ export class PostgresFinanceStore implements FinanceStore {
     FROM account_members am JOIN accounts a ON a.id=am.account_id
     LEFT JOIN totals ON totals.account_id=a.id LEFT JOIN member_counts mc ON mc.account_id=a.id
     JOIN workspaces w ON w.id=a.workspace_id
-    WHERE am.user_id=$1 AND a.archived_at IS NULL AND w.deleted_at IS NULL
+    WHERE am.user_id=$1 AND (a.archived_at IS NULL OR am.role='owner') AND w.deleted_at IS NULL
     ORDER BY CASE am.role WHEN 'owner' THEN 0 ELSE 1 END,a.created_at`, [userId])
     const accounts: AccountView[] = accessibleResult.rows.map((row) => ({ ...accountRow(row), balanceKopecks: Number(row.balance_kopecks) }))
     const workspaceResult = await this.pool.query(`SELECT w.id,w.name,w.kind,
@@ -199,7 +199,7 @@ export class PostgresFinanceStore implements FinanceStore {
       ? persisted || null
       : requestedAccountId === null
         ? null
-        : accounts.find((item) => item.id === requestedAccountId && !item.archivedAt) || null
+        : accounts.find((item) => item.id === requestedAccountId) || null
     if (requestedAccountId && !selectedAccount) throw forbidden('Нет доступа к этому кошельку')
     const activeWorkspaceId = selectedAccount?.workspaceId
       || (workspaceId && workspaces.some((item) => item.id === workspaceId) ? workspaceId : null)
@@ -208,7 +208,7 @@ export class PostgresFinanceStore implements FinanceStore {
     if (!activeWorkspaceId) throw notFound('Пространство не найдено')
     const scopedAccountIds = selectedAccount
       ? [selectedAccount.id]
-      : accounts.filter((item) => item.workspaceId === activeWorkspaceId && !item.archivedAt).map((item) => item.id)
+      : accounts.filter((item) => item.workspaceId === activeWorkspaceId).map((item) => item.id)
     if (!scopedAccountIds.length) throw notFound('Кошелёк не найден')
     const window = resolveRange(range)
     const byMonth = zonedDayNumber(window.end, currentUser.timezone) - zonedDayNumber(window.start, currentUser.timezone) > 62
@@ -265,7 +265,7 @@ export class PostgresFinanceStore implements FinanceStore {
   }
 
   async transactionsPage(userId: string, workspaceId: string, range: SnapshotRange, cursor?: string, limit = 20, accountId?: string | null): Promise<TransactionPage> {
-    const result = await this.pool.query(`SELECT a.id FROM account_members am JOIN accounts a ON a.id=am.account_id WHERE am.user_id=$1 AND a.workspace_id=$2 AND a.archived_at IS NULL`, [userId, workspaceId])
+    const result = await this.pool.query(`SELECT a.id FROM account_members am JOIN accounts a ON a.id=am.account_id WHERE am.user_id=$1 AND a.workspace_id=$2 AND (a.archived_at IS NULL OR am.role='owner')`, [userId, workspaceId])
     const allowed = result.rows.map((row) => row.id as string)
     if (accountId && !allowed.includes(accountId)) throw forbidden('Нет доступа к этому кошельку')
     const scope = accountId ? [accountId] : allowed
@@ -535,6 +535,19 @@ export class PostgresFinanceStore implements FinanceStore {
       await client.query(`UPDATE account_invites SET revoked_at=now() WHERE account_id=$1 AND used_at IS NULL AND revoked_at IS NULL`, [accountId])
       await client.query(`UPDATE users SET active_account_id=NULL WHERE active_account_id=$1`, [accountId])
       await this.audit(client, access.workspaceId, userId, 'account', accountId, 'archive', { version: version + 1 })
+      await client.query('COMMIT')
+    } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
+  }
+
+  async restoreAccount(userId: string, accountId: string, version: number) {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const found = await client.query(`SELECT a.workspace_id,a.version,a.archived_at,am.role FROM accounts a JOIN account_members am ON am.account_id=a.id AND am.user_id=$2 WHERE a.id=$1 FOR UPDATE OF a`, [accountId, userId])
+      if (!found.rowCount || found.rows[0].role !== 'owner' || !found.rows[0].archived_at) throw notFound('Архивный кошелёк не найден')
+      if (Number(found.rows[0].version) !== version) throw conflict('Кошелёк уже изменён — обновите экран')
+      await client.query(`UPDATE accounts SET archived_at=NULL,updated_at=now(),version=version+1 WHERE id=$1`, [accountId])
+      await this.audit(client, found.rows[0].workspace_id, userId, 'account', accountId, 'restore', { version: version + 1 })
       await client.query('COMMIT')
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
   }

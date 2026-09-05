@@ -156,8 +156,9 @@ export class MemoryFinanceStore implements FinanceStore {
 
   async snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, requestedAccountId?: string | null): Promise<AppSnapshot> {
     const user = this.requireUser(userId)
-    const accessible = this.accessibleAccounts(userId).filter((item) => !item.archivedAt)
-    const workspaceIds = new Set(accessible.map((item) => item.workspaceId))
+    const accessible = this.historicalAccounts(userId)
+    const active = accessible.filter((item) => !item.archivedAt)
+    const workspaceIds = new Set(active.map((item) => item.workspaceId))
     const available = [...this.workspaces.values()]
       .filter((workspace) => workspaceIds.has(workspace.id))
       .map((workspace): WorkspaceSummary => ({
@@ -167,8 +168,8 @@ export class MemoryFinanceStore implements FinanceStore {
         role: workspace.ownerUserId === userId ? 'owner' : 'member',
       }))
 
-    const persisted = user.activeAccountId && accessible.find((item) => item.id === user.activeAccountId && !item.archivedAt)
-    const requested = requestedAccountId === undefined ? persisted : requestedAccountId === null ? null : accessible.find((item) => item.id === requestedAccountId && !item.archivedAt)
+    const persisted = user.activeAccountId && active.find((item) => item.id === user.activeAccountId)
+    const requested = requestedAccountId === undefined ? persisted : requestedAccountId === null ? null : accessible.find((item) => item.id === requestedAccountId)
     if (requestedAccountId && !requested) throw forbidden('Нет доступа к этому кошельку')
     const selectedAccount = requested || null
     const activeWorkspaceId = selectedAccount?.workspaceId
@@ -177,8 +178,8 @@ export class MemoryFinanceStore implements FinanceStore {
       || available[0]?.id
     if (!activeWorkspaceId) throw notFound('Пространство не найдено')
 
-    const activeWorkspaceAccounts = accessible.filter((item) => item.workspaceId === activeWorkspaceId && !item.archivedAt)
-    const scopedIds = new Set(selectedAccount ? [selectedAccount.id] : activeWorkspaceAccounts.map((item) => item.id))
+    const historicalWorkspaceAccounts = accessible.filter((item) => item.workspaceId === activeWorkspaceId)
+    const scopedIds = new Set(selectedAccount ? [selectedAccount.id] : historicalWorkspaceAccounts.map((item) => item.id))
     if (!scopedIds.size) throw notFound('Кошелёк не найден')
     const allWorkspaceTransactions = this.transactions.get(activeWorkspaceId) || []
     const scopedTransactions = allWorkspaceTransactions.filter((item) => scopedIds.has(item.accountId) || Boolean(item.targetAccountId && scopedIds.has(item.targetAccountId)))
@@ -219,7 +220,7 @@ export class MemoryFinanceStore implements FinanceStore {
   }
 
   async transactionsPage(userId: string, workspaceId: string, range: SnapshotRange, cursor?: string, limit = 20, accountId?: string | null): Promise<TransactionPage> {
-    const allowed = new Set(this.accessibleAccounts(userId).filter((item) => item.workspaceId === workspaceId && !item.archivedAt).map((item) => item.id))
+    const allowed = new Set(this.historicalAccounts(userId).filter((item) => item.workspaceId === workspaceId).map((item) => item.id))
     if (accountId) {
       if (!allowed.has(accountId)) throw forbidden('Нет доступа к этому кошельку')
       return this.pageFor(workspaceId, resolveRange(range), cursor, limit, new Set([accountId]))
@@ -420,6 +421,15 @@ export class MemoryFinanceStore implements FinanceStore {
       return
     }
     throw notFound('Счёт не найден')
+  }
+
+  async restoreAccount(userId: string, accountId: string, version: number) {
+    const account = this.findAccount(accountId)
+    const role = this.accountAccess.get(accountId)?.get(userId)
+    if (role !== 'owner' || !account.archivedAt) throw notFound('Архивный кошелёк не найден')
+    if (account.version !== version) throw conflict('Кошелёк уже изменён — обновите экран')
+    account.archivedAt = null
+    account.version += 1
   }
 
   async setActiveAccount(userId: string, input: ActiveAccountInput) {
@@ -726,6 +736,9 @@ export class MemoryFinanceStore implements FinanceStore {
       }
     }
     return views
+  }
+  private historicalAccounts(userId: string) {
+    return this.accessibleAccounts(userId).filter((item) => !item.archivedAt || item.accessRole === 'owner')
   }
   private fallbackAfterAccessLoss(userId: string, accountId: string) {
     const user = this.requireUser(userId)

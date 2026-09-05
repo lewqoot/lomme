@@ -147,6 +147,7 @@ export interface FinanceStore {
   createAccount(userId: string, input: AccountInput): Promise<{ id: string }>
   updateAccount(userId: string, accountId: string, input: AccountUpdate): Promise<void>
   archiveAccount(userId: string, accountId: string, version: number): Promise<void>
+  restoreAccount(userId: string, accountId: string, version: number): Promise<void>
   setActiveAccount(userId: string, input: ActiveAccountInput): Promise<void>
   createAccountInvite(userId: string, accountId: string): Promise<{ id: string; token: string; expiresAt: string }>
   previewAccountInvite(userId: string, token: string): Promise<AccountInvitePreview>

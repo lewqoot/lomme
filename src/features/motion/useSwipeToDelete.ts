@@ -14,7 +14,7 @@ const MAX = 116
  * jump back to zero the moment a second gesture starts. Only clearly horizontal
  * movement is claimed - anything else belongs to the list.
  */
-export function useSwipeToDelete(onDelete: () => void) {
+export function useSwipeToDelete(onDelete: () => void, enabled = true) {
   const row = useRef<HTMLDivElement>(null)
   const [offset, setOffset] = useState(0)
   const [settling, setSettling] = useState(false)
@@ -24,7 +24,7 @@ export function useSwipeToDelete(onDelete: () => void) {
 
   useEffect(() => {
     const node = row.current
-    if (!node) return
+    if (!node || !enabled) return
     let start: { x: number; y: number } | null = null
     let base = 0
     let axis: 'none' | 'x' | 'y' = 'none'
@@ -82,7 +82,7 @@ export function useSwipeToDelete(onDelete: () => void) {
       node.removeEventListener('touchend', onEnd)
       node.removeEventListener('touchcancel', onEnd)
     }
-  }, [])
+  }, [enabled])
 
   const close = () => { setSettling(true); held.current = 0; setOffset(0) }
   return { row, offset, settling, close, revealed: offset >= REVEAL / 2 }
