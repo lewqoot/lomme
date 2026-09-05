@@ -40,6 +40,16 @@ import type {
 } from './types.js'
 import { expenseCategories, incomeCategories } from './default-categories.js'
 
+/**
+ * Reminders are on unless the person turns them off.
+ *
+ * Only somebody who has allowed the bot to write to them is ever a candidate,
+ * a reminder is skipped on any day that already has entries, and the
+ * notifications screen switches the lot off — so the default is a nudge for
+ * people who asked for the bot, not a broadcast.
+ */
+const REMINDER_DEFAULTS = { enabled: true, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
+
 const { Pool } = pg
 type Queryable = Pick<PoolClient, 'query'>
 
@@ -613,7 +623,9 @@ export class PostgresFinanceStore implements FinanceStore {
     const result = await this.pool.query(
       `SELECT enabled, local_time, days_of_week FROM reminders WHERE user_id=$1`, [userId])
     const row = result.rows[0]
-    if (!row) return { enabled: false, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
+    // No row means the person has never opened the notifications screen, which
+    // is the default state rather than a decision to be left out.
+    if (!row) return { ...REMINDER_DEFAULTS }
     return {
       enabled: row.enabled as boolean,
       localTime: String(row.local_time).slice(0, 5),
@@ -640,24 +652,27 @@ export class PostgresFinanceStore implements FinanceStore {
    */
   async reminderCandidates(): Promise<ReminderCandidate[]> {
     const result = await this.pool.query(
-      `SELECT r.user_id, u.telegram_user_id, r.timezone, r.local_time, r.days_of_week,
+      `SELECT u.id AS user_id, u.telegram_user_id,
+              COALESCE(r.timezone, u.timezone) AS timezone,
+              COALESCE(r.local_time, $1::text) AS local_time,
+              COALESCE(r.days_of_week, $2::int[]) AS days_of_week,
               u.created_at, u.quick_key_hash IS NOT NULL AS has_quick_key,
               (SELECT count(*) FROM transactions t
-                 WHERE t.created_by_user_id=r.user_id AND t.deleted_at IS NULL)::int AS entry_count,
+                 WHERE t.created_by_user_id=u.id AND t.deleted_at IS NULL)::int AS entry_count,
               EXISTS (SELECT 1 FROM account_members mine
                         JOIN account_members others ON others.account_id=mine.account_id AND others.user_id<>mine.user_id
-                       WHERE mine.user_id=r.user_id) AS has_shared_wallet,
+                       WHERE mine.user_id=u.id) AS has_shared_wallet,
               (SELECT coalesce(array_agg(DISTINCT d.kind), '{}') FROM reminder_deliveries d
-                 WHERE d.user_id=r.user_id AND d.delivered_at IS NOT NULL) AS sent_kinds,
+                 WHERE d.user_id=u.id AND d.delivered_at IS NOT NULL) AS sent_kinds,
               (SELECT MAX(t.occurred_at) FROM transactions t
-                 WHERE t.created_by_user_id=r.user_id AND t.deleted_at IS NULL) AS last_entry_at,
+                 WHERE t.created_by_user_id=u.id AND t.deleted_at IS NULL) AS last_entry_at,
               (SELECT count(*) FROM reminder_deliveries d
-                 WHERE d.user_id=r.user_id AND d.kind='daily' AND d.delivered_at IS NOT NULL) AS delivered_count,
+                 WHERE d.user_id=u.id AND d.kind='daily' AND d.delivered_at IS NOT NULL) AS delivered_count,
               (SELECT MAX(d.delivered_at) FROM reminder_deliveries d
-                 WHERE d.user_id=r.user_id) AS last_delivery_at
-         FROM reminders r JOIN users u ON u.id=r.user_id
-        WHERE r.enabled AND u.deleted_at IS NULL AND u.bot_write_access
-        LIMIT 5000`)
+                 WHERE d.user_id=u.id) AS last_delivery_at
+         FROM users u LEFT JOIN reminders r ON r.user_id=u.id
+        WHERE COALESCE(r.enabled, true) AND u.deleted_at IS NULL AND u.bot_write_access
+        LIMIT 5000`, [REMINDER_DEFAULTS.localTime, REMINDER_DEFAULTS.daysOfWeek])
     return result.rows.map((row) => ({
       userId: row.user_id as string,
       telegramUserId: Number(row.telegram_user_id),

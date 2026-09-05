@@ -271,7 +271,17 @@ describe('доставка напоминаний', () => {
     expect(sent).toHaveLength(1)
   })
 
-  it('не трогает того, кто напоминания не включал', async () => {
+  it('приходит и тому, кто настройки не открывал: по умолчанию включено', async () => {
+    const sent = telegram(200, { ok: true, result: { message_id: 1 } })
+
+    const report = await runDeliveries(store, MONDAY_EVENING)
+
+    expect(report).toMatchObject({ sent: 1 })
+    expect(sent[0]).toContain('напомнить про траты')
+  })
+
+  it('молчит с тем, кто напоминания выключил', async () => {
+    await store.saveReminderSettings(userId, { enabled: false, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] })
     const sent = telegram(200, { ok: true, result: { message_id: 1 } })
 
     const report = await runDeliveries(store, MONDAY_EVENING)
@@ -443,8 +453,11 @@ describe('дайджест общего кошелька', () => {
 
     await runDeliveries(store, MONDAY_EVENING)
 
-    // Записи за сегодня есть, значит и напоминание не нужно: тишина.
-    expect(sent).toHaveLength(0)
+    // Владельцу сказать нечего: траты его собственные, и записи за сегодня
+    // уже есть, так что и напоминание ему не нужно. А вот второму участнику
+    // это как раз новость.
+    expect(sent.map((item) => item.chatId)).toEqual([902])
+    expect(sent[0]!.text).toContain('Алекс — 1 запись')
   })
 
   it('вместо дайджеста шлёт напоминание, когда в кошельке пусто', async () => {
@@ -494,11 +507,21 @@ describe('настройки напоминаний через API', () => {
 
   afterEach(async () => { await app.close() })
 
-  it('по умолчанию выключены', async () => {
+  it('по умолчанию включены, вечером и каждый день', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/reminders', headers: { cookie } })
 
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toEqual({ enabled: false, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] })
+    expect(response.json()).toEqual({ enabled: true, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] })
+  })
+
+  it('выключение сохраняется и переживает перечитывание', async () => {
+    await app.inject({
+      method: 'PATCH', url: '/api/v1/reminders', headers: { cookie },
+      payload: { enabled: false, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] },
+    })
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/reminders', headers: { cookie } })
+    expect(response.json()).toMatchObject({ enabled: false })
   })
 
   it('сохраняет время и дни', async () => {

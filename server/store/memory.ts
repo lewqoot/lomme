@@ -567,7 +567,8 @@ export class MemoryFinanceStore implements FinanceStore {
   }
 
   async reminderSettings(userId: string) {
-    return this.reminders.get(userId) ?? { enabled: false, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
+    // Absent means untouched, and untouched means on — see REMINDER_DEFAULTS.
+    return this.reminders.get(userId) ?? { enabled: true, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
   }
 
   async saveReminderSettings(userId: string, input: ReminderSettingsInput) {
@@ -578,9 +579,9 @@ export class MemoryFinanceStore implements FinanceStore {
 
   async reminderCandidates(): Promise<ReminderCandidate[]> {
     const candidates: ReminderCandidate[] = []
-    for (const [userId, settings] of this.reminders) {
-      const user = this.users.get(userId)
-      if (!settings.enabled || !user?.botWriteAccess) continue
+    for (const [userId, user] of this.users) {
+      const settings = await this.reminderSettings(userId)
+      if (!settings.enabled || !user.botWriteAccess) continue
       const own = [...this.transactions.values()].flat()
         .filter((entry) => entry.authorName === user.firstName)
         .map((entry) => new Date(entry.occurredAt).getTime())
