@@ -220,7 +220,8 @@ export class PostgresFinanceStore implements FinanceStore {
       selectedAccount ? this.pool.query(`SELECT u.id AS user_id,u.first_name,u.username,am.role FROM account_members am JOIN users u ON u.id=am.user_id WHERE am.account_id=$1 ORDER BY am.role,am.joined_at`, [selectedAccount.id]) : Promise.resolve({ rows: [] }),
       this.pool.query(`WITH period AS (
         SELECT id,type,amount_kopecks,category_id,occurred_at FROM transactions
-        WHERE workspace_id=$1 AND deleted_at IS NULL AND occurred_at BETWEEN $2 AND $3 AND account_id=ANY($5::uuid[])
+        WHERE workspace_id=$1 AND deleted_at IS NULL AND occurred_at BETWEEN $2 AND $3
+          AND (account_id=ANY($5::uuid[]) OR target_account_id=ANY($5::uuid[]))
       ), days AS (
         SELECT to_char(occurred_at AT TIME ZONE $4,'YYYY-MM-DD') AS day,SUM(amount_kopecks) AS amount
         FROM period WHERE type='expense' GROUP BY day ORDER BY amount DESC,day LIMIT 1

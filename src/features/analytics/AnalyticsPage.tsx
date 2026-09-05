@@ -61,6 +61,10 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
   const account = data.activeAccountId
     ? data.accounts.find((item) => item.id === data.activeAccountId)
     : undefined
+  const workspace = data.workspaces.find((item) => item.id === data.activeWorkspaceId)
+  const scopedAccounts = data.accounts.filter((item) => !item.archivedAt && item.workspaceId === data.activeWorkspaceId)
+  const scopeName = account?.name || `Все счета · ${workspace?.name || 'пространство'}`
+  const scopeBalance = account?.balanceKopecks ?? scopedAccounts.reduce((sum, item) => sum + item.balanceKopecks, 0)
   const dataMotionKey = [
     kind,
     type,
@@ -79,7 +83,7 @@ export function AnalyticsPage({ data, period, setPeriod, onClose, glyph, onShare
   return <div className="analytics-screen">
     <header className="analytics-top">
       <button className="close-orb" type="button" onClick={onClose} aria-label="Назад"><ChevronLeft /></button>
-      <div className="account-pill static"><span className="account-icon">{glyph(account?.icon)}</span><span><strong>{account?.name}</strong><small>{money(account?.balanceKopecks || 0)}</small></span></div>
+      <div className="account-pill static"><span className="account-icon">{glyph(account?.icon || 'wallet')}</span><span><strong>{scopeName}</strong><small>{money(scopeBalance)}</small></span></div>
       <div className="analytics-tools" ref={chartAnchor}>
         <button type="button" aria-label="Тип диаграммы" aria-haspopup="menu" aria-expanded={chartMenu.open} onClick={() => { haptics.selection(); chartMenu.toggle() }}>{CHART_ICON[kind]}</button>
         <button type="button" aria-label="Поделиться" onClick={share}><SquareArrowUp /></button>
