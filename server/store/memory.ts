@@ -11,7 +11,7 @@ import {
   type WorkspaceSummary,
 } from '../../src/shared/contracts.js'
 import type { TelegramIdentity } from '../auth/telegram.js'
-import type { ReminderCandidate } from '../telegram/reminders.js'
+import type { DeliveryKind, ReminderCandidate } from '../telegram/reminders.js'
 import { calculateSummary } from '../lib/analytics.js'
 import { issueQuickKey, quickKeyMatches } from '../lib/quick-key.js'
 import { parseQuickAmount, resolveQuickEntry } from '../../src/shared/quick-entry.js'
@@ -64,6 +64,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private processedUpdates = new Set<number>()
   private reminders = new Map<string, { enabled: boolean; localTime: string; daysOfWeek: number[] }>()
   private reminderDeliveries = new Set<string>()
+  private lastDelivery = new Map<string, Date>()
   private workspaces = new Map<string, InternalWorkspace>()
   private members = new Map<string, MemberView[]>()
   private accounts = new Map<string, AccountView[]>()
@@ -525,23 +526,26 @@ export class MemoryFinanceStore implements FinanceStore {
         localTime: settings.localTime,
         daysOfWeek: settings.daysOfWeek,
         lastEntryAt: own.length ? new Date(Math.max(...own)) : null,
-        deliveredCount: [...this.reminderDeliveries].filter((key) => key.startsWith(`${userId}:`)).length,
+        deliveredCount: [...this.reminderDeliveries].filter((key) => key.startsWith(`${userId}:daily:`)).length,
+        lastDeliveryAt: this.lastDelivery.get(userId) ?? null,
       })
     }
     return candidates
   }
 
-  async claimReminderDelivery(userId: string, scheduledFor: Date) {
-    const key = `${userId}:${scheduledFor.toISOString()}`
+  async claimDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date) {
+    const key = `${userId}:${kind}:${scheduledFor.toISOString()}`
     if (this.reminderDeliveries.has(key)) return false
     this.reminderDeliveries.add(key)
     return true
   }
 
-  async settleReminderDelivery() {}
+  async settleDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date, error?: string) {
+    if (!error) this.lastDelivery.set(userId, scheduledFor)
+  }
 
-  async releaseReminderDelivery(userId: string, scheduledFor: Date) {
-    this.reminderDeliveries.delete(`${userId}:${scheduledFor.toISOString()}`)
+  async releaseDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date) {
+    this.reminderDeliveries.delete(`${userId}:${kind}:${scheduledFor.toISOString()}`)
   }
 
   async revokeBotWriteAccess(telegramUserId: number) {

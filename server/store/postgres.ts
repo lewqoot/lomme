@@ -20,7 +20,7 @@ import { DATA_COLORS } from '../../src/shared/design-tokens.js'
 import { resolveRange, type SnapshotRange } from '../lib/range.js'
 import { decodeTransactionCursor, encodeTransactionCursor } from '../lib/transaction-cursor.js'
 import { AppError, conflict, forbidden, notFound } from '../lib/errors.js'
-import type { ReminderCandidate } from '../telegram/reminders.js'
+import type { DeliveryKind, ReminderCandidate } from '../telegram/reminders.js'
 import { hashToken, randomToken } from '../lib/security.js'
 import type {
   AccountInput,
@@ -554,7 +554,9 @@ export class PostgresFinanceStore implements FinanceStore {
               (SELECT MAX(t.occurred_at) FROM transactions t
                  WHERE t.created_by_user_id=r.user_id AND t.deleted_at IS NULL) AS last_entry_at,
               (SELECT count(*) FROM reminder_deliveries d
-                 WHERE d.user_id=r.user_id AND d.delivered_at IS NOT NULL) AS delivered_count
+                 WHERE d.user_id=r.user_id AND d.kind='daily' AND d.delivered_at IS NOT NULL) AS delivered_count,
+              (SELECT MAX(d.delivered_at) FROM reminder_deliveries d
+                 WHERE d.user_id=r.user_id) AS last_delivery_at
          FROM reminders r JOIN users u ON u.id=r.user_id
         WHERE r.enabled AND u.deleted_at IS NULL AND u.bot_write_access
         LIMIT 5000`)
@@ -566,30 +568,31 @@ export class PostgresFinanceStore implements FinanceStore {
       daysOfWeek: row.days_of_week as number[],
       lastEntryAt: row.last_entry_at ? new Date(row.last_entry_at as string) : null,
       deliveredCount: Number(row.delivered_count),
+      lastDeliveryAt: row.last_delivery_at ? new Date(row.last_delivery_at as string) : null,
     }))
   }
 
-  /** The unique index on (user, scheduled_for) is what stops a second send. */
-  async claimReminderDelivery(userId: string, scheduledFor: Date) {
+  /** The unique index on (user, kind, scheduled_for) is what stops a second send. */
+  async claimDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date) {
     const result = await this.pool.query(
-      `INSERT INTO reminder_deliveries (user_id, scheduled_for) VALUES ($1,$2)
-       ON CONFLICT (user_id, scheduled_for) DO NOTHING`, [userId, scheduledFor])
+      `INSERT INTO reminder_deliveries (user_id, kind, scheduled_for) VALUES ($1,$2,$3)
+       ON CONFLICT (user_id, kind, scheduled_for) DO NOTHING`, [userId, kind, scheduledFor])
     return result.rowCount === 1
   }
 
-  async settleReminderDelivery(userId: string, scheduledFor: Date, error?: string) {
+  async settleDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date, error?: string) {
     if (!error) {
       await this.pool.query(
-        `UPDATE reminder_deliveries SET delivered_at=now() WHERE user_id=$1 AND scheduled_for=$2`, [userId, scheduledFor])
+        `UPDATE reminder_deliveries SET delivered_at=now() WHERE user_id=$1 AND kind=$2 AND scheduled_for=$3`, [userId, kind, scheduledFor])
       return
     }
     await this.pool.query(
-      `UPDATE reminder_deliveries SET error=$3 WHERE user_id=$1 AND scheduled_for=$2`, [userId, scheduledFor, error])
+      `UPDATE reminder_deliveries SET error=$4 WHERE user_id=$1 AND kind=$2 AND scheduled_for=$3`, [userId, kind, scheduledFor, error])
   }
 
-  async releaseReminderDelivery(userId: string, scheduledFor: Date) {
+  async releaseDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date) {
     await this.pool.query(
-      `DELETE FROM reminder_deliveries WHERE user_id=$1 AND scheduled_for=$2 AND delivered_at IS NULL`, [userId, scheduledFor])
+      `DELETE FROM reminder_deliveries WHERE user_id=$1 AND kind=$2 AND scheduled_for=$3 AND delivered_at IS NULL`, [userId, kind, scheduledFor])
   }
 
   /** Called when Telegram says the chat is gone for good. */

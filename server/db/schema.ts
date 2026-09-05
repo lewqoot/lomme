@@ -213,10 +213,12 @@ export const reminders = pgTable('reminders', {
 export const reminderDeliveries = pgTable('reminder_deliveries', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  /** Which schedule this slot belongs to: daily, weekly or monthly. */
+  kind: text('kind').default('daily').notNull(),
   scheduledFor: timestamp('scheduled_for', { withTimezone: true }).notNull(),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   error: text('error'),
-}, (table) => [uniqueIndex('reminder_deliveries_once_idx').on(table.userId, table.scheduledFor)])
+}, (table) => [uniqueIndex('reminder_deliveries_once_idx').on(table.userId, table.kind, table.scheduledFor)])
 
 export const aiDrafts = pgTable('ai_drafts', {
   id: uuid('id').defaultRandom().primaryKey(),

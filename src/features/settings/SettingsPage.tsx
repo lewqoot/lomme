@@ -156,20 +156,22 @@ function NotificationsScreen({ motion, onBack, notify }: { motion: string; onBac
     {loadFailed && <p className="reminder-note">Не удалось загрузить настройки. Попробуй открыть экран заново.</p>}
 
     {settings && <>
-      <SettingsSection title="Напоминание о тратах">
+      <SettingsSection title="Сообщения в чате">
         <button className="settings-row" type="button" onClick={() => apply({ ...settings, enabled: !settings.enabled })}>
           <span className="settings-row-icon"><Bell /></span>
-          <strong>Напоминать в чате</strong>
+          <strong>Напоминания и сводки</strong>
           <em><span className={`fake-toggle${settings.enabled ? ' on' : ''}`} aria-hidden="true"><b /></span></em>
         </button>
       </SettingsSection>
 
       <p className="reminder-note">
         Если за день уже есть записи, напоминание не придёт — писать не о чем.
+        По воскресеньям приходит итог недели, первого числа — итог месяца.
+        Больше одного сообщения в день не будет.
       </p>
 
       {settings.enabled && <>
-        <SettingsSection title="Когда">
+        <SettingsSection title="Когда напоминать">
           <div className="settings-row settings-row-static">
             <span className="settings-row-icon" />
             <strong>Время</strong>

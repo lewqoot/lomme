@@ -1,53 +1,140 @@
 /**
- * Sends what the worker decided to send.
+ * Sends what the schedules decided to send.
  *
  * Delivery is deliberately sequential and paced: Telegram allows about thirty
  * messages a second across a bot, and a burst that trips that limit costs more
  * time than the pause it skipped.
+ *
+ * Kinds run in priority order — monthly, weekly, then the daily reminder — and
+ * a delivery of any kind suppresses the reminder later the same evening. Two
+ * messages in one night is what people mute a bot for.
  */
 
 import type { FinanceStore } from '../store/types.js'
-import { sendMessage } from './api.js'
-import { reminderDueAt } from './reminders.js'
-import { dailyReminder } from './texts.js'
+import { sendMessage, type BotMessage } from './api.js'
+import {
+  lastMonthRange,
+  lastWeekRange,
+  previousWeekRange,
+  monthlyDigestDueAt,
+  reminderDueAt,
+  weeklyDigestDueAt,
+  type DeliveryKind,
+  type ReminderCandidate,
+} from './reminders.js'
+import { dailyReminder, monthlyDigest, weeklyDigest } from './texts.js'
 
 const PACING_MS = 40
+
+/**
+ * Below this, a summary is arithmetic on too little: the same threshold the
+ * insights screen uses before it makes any claim about a person's spending.
+ */
+const MIN_OBSERVED_DAYS = 7
 
 const wait = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms) })
 
 export type DeliveryReport = { sent: number; skipped: number; failed: number; revoked: number }
 
-export async function deliverDailyReminders(store: FinanceStore, now = new Date()): Promise<DeliveryReport> {
+type Planned = { kind: DeliveryKind; scheduledFor: Date; message: BotMessage }
+
+export async function runDeliveries(store: FinanceStore, now = new Date()): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, skipped: 0, failed: 0, revoked: 0 }
   const candidates = await store.reminderCandidates()
 
   for (const candidate of candidates) {
-    const scheduledFor = reminderDueAt(candidate, now)
-    if (!scheduledFor) { report.skipped += 1; continue }
+    const planned = await planFor(store, candidate, now)
+    if (!planned) { report.skipped += 1; continue }
 
     // Claiming before sending is what keeps two overlapping worker ticks from
-    // greeting the same person twice.
-    if (!(await store.claimReminderDelivery(candidate.userId, scheduledFor))) { report.skipped += 1; continue }
+    // writing to the same person twice.
+    if (!(await store.claimDelivery(candidate.userId, planned.kind, planned.scheduledFor))) {
+      report.skipped += 1
+      continue
+    }
 
-    const outcome = await sendMessage(candidate.telegramUserId, dailyReminder(candidate.deliveredCount))
+    const outcome = await sendMessage(candidate.telegramUserId, planned.message)
     if (outcome.ok) {
-      await store.settleReminderDelivery(candidate.userId, scheduledFor)
+      await store.settleDelivery(candidate.userId, planned.kind, planned.scheduledFor)
       report.sent += 1
     } else if (outcome.permanent) {
       // The chat is gone for good, so stop writing to it rather than failing
       // here again every evening.
-      await store.settleReminderDelivery(candidate.userId, scheduledFor, outcome.description)
+      await store.settleDelivery(candidate.userId, planned.kind, planned.scheduledFor, outcome.description)
       await store.revokeBotWriteAccess(candidate.telegramUserId)
       report.revoked += 1
     } else {
       // Still inside tonight's window on the next tick, so give the slot back.
-      await store.releaseReminderDelivery(candidate.userId, scheduledFor)
+      await store.releaseDelivery(candidate.userId, planned.kind, planned.scheduledFor)
       report.failed += 1
     }
-    await wait(outcome.ok === false && !outcome.permanent && outcome.retryAfter
+
+    const backOff = !outcome.ok && !outcome.permanent && outcome.retryAfter
       ? Math.min(outcome.retryAfter, 30) * 1000
-      : PACING_MS)
+      : PACING_MS
+    await wait(backOff)
   }
 
   return report
+}
+
+/** The one message this person is owed right now, highest priority first. */
+async function planFor(store: FinanceStore, candidate: ReminderCandidate, now: Date): Promise<Planned | null> {
+  const monthly = monthlyDigestDueAt(candidate.timezone, now)
+  if (monthly) {
+    const message = await monthlyMessage(store, candidate, now)
+    if (message) return { kind: 'monthly', scheduledFor: monthly, message }
+  }
+
+  const weekly = weeklyDigestDueAt(candidate.timezone, now)
+  if (weekly) {
+    const message = await weeklyMessage(store, candidate, now)
+    if (message) return { kind: 'weekly', scheduledFor: weekly, message }
+  }
+
+  const daily = reminderDueAt(candidate, now)
+  return daily ? { kind: 'daily', scheduledFor: daily, message: dailyReminder(candidate.deliveredCount) } : null
+}
+
+async function summaryFor(store: FinanceStore, userId: string, range: { start: Date; end: Date }) {
+  const snapshot = await store.snapshot(userId, undefined, { start: range.start.toISOString(), end: range.end.toISOString() })
+  return snapshot.summary
+}
+
+/** Expense categories only, biggest first: a digest is about where money went. */
+function topExpense(byCategory: Array<{ name: string; amountKopecks: number; type: 'income' | 'expense' }>, limit: number) {
+  return byCategory.filter((item) => item.type === 'expense').slice(0, limit)
+}
+
+async function weeklyMessage(store: FinanceStore, candidate: ReminderCandidate, now: Date) {
+  const range = lastWeekRange(candidate.timezone, now)
+  const summary = await summaryFor(store, candidate.userId, range)
+  // Nothing spent is not a story, and too few observed days is not a claim.
+  if (!summary.expenseKopecks || summary.observedDayCount < MIN_OBSERVED_DAYS) return null
+
+  const previous = await summaryFor(store, candidate.userId, previousWeekRange(candidate.timezone, now))
+  // Only compare against a week that actually had spending in it.
+  const comparable = previous.expenseKopecks > 0 ? previous.expenseKopecks : null
+
+  return weeklyDigest({
+    expenseKopecks: summary.expenseKopecks,
+    previousExpenseKopecks: comparable,
+    top: topExpense(summary.byCategory, 1),
+  })
+}
+
+async function monthlyMessage(store: FinanceStore, candidate: ReminderCandidate, now: Date) {
+  const range = lastMonthRange(candidate.timezone, now)
+  const summary = await summaryFor(store, candidate.userId, range)
+  if (!summary.expenseKopecks && !summary.incomeKopecks) return null
+  if (summary.observedDayCount < MIN_OBSERVED_DAYS) return null
+
+  return monthlyDigest({
+    year: range.year,
+    month: range.month,
+    incomeKopecks: summary.incomeKopecks,
+    expenseKopecks: summary.expenseKopecks,
+    netKopecks: summary.netKopecks,
+    top: topExpense(summary.byCategory, 3),
+  })
 }

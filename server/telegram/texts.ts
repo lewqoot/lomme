@@ -160,6 +160,62 @@ export function dailyReminder(deliveredBefore: number): BotMessage {
   return { text: lines.join('\n') }
 }
 
+const MONTH_NAMES = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+]
+
+type DigestCategory = { name: string; amountKopecks: number }
+
+/**
+ * Sunday's wrap-up. It leads with the number and only then explains it, and the
+ * comparison line appears only when there is a comparable week behind it —
+ * "на 100% меньше, чем на прошлой неделе" is what a bot says when it has
+ * nothing to say.
+ */
+export function weeklyDigest(input: {
+  expenseKopecks: number
+  previousExpenseKopecks: number | null
+  top: DigestCategory[]
+}): BotMessage {
+  const lines = ['📊 Неделя закрыта', '']
+  const difference = input.previousExpenseKopecks === null ? null : input.expenseKopecks - input.previousExpenseKopecks
+  if (difference === null || difference === 0) {
+    lines.push(`Потратил ${money(input.expenseKopecks)}.`)
+  } else {
+    const shape = difference < 0 ? 'меньше' : 'больше'
+    lines.push(`Потратил ${money(input.expenseKopecks)} — на ${money(Math.abs(difference))} ${shape}, чем неделей раньше.`)
+  }
+  const leader = input.top[0]
+  if (leader) lines.push('', `Больше всего ушло на ${leader.name}: ${money(leader.amountKopecks)}.`)
+  return { text: lines.join('\n') }
+}
+
+/** The month that just ended, in the three numbers people actually look for. */
+export function monthlyDigest(input: {
+  year: number
+  month: number
+  incomeKopecks: number
+  expenseKopecks: number
+  netKopecks: number
+  top: DigestCategory[]
+}): BotMessage {
+  const name = MONTH_NAMES[input.month - 1] ?? ''
+  const lines = [
+    `🗓 ${name} закрыт`,
+    '',
+    `Доходы  ${money(input.incomeKopecks)}`,
+    `Расходы  ${money(input.expenseKopecks)}`,
+    input.netKopecks < 0
+      ? `Ушли в минус на ${money(Math.abs(input.netKopecks))}`
+      : `Осталось  ${money(input.netKopecks)}`,
+  ]
+  if (input.top.length) {
+    lines.push('', `Больше всего: ${input.top.map((item) => `${item.name} ${money(item.amountKopecks)}`).join(', ')}.`)
+  }
+  return { text: lines.join('\n') }
+}
+
 export function accountInvite(accountName: string, inviteUrl: string): BotMessage {
   return {
     text: [

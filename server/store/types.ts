@@ -18,7 +18,7 @@ import type {
   activeAccountSchema,
 } from '../../src/shared/contracts.js'
 import type { TelegramIdentity } from '../auth/telegram.js'
-import type { ReminderCandidate } from '../telegram/reminders.js'
+import type { DeliveryKind, ReminderCandidate } from '../telegram/reminders.js'
 
 export type AuthInput = z.infer<typeof authTelegramSchema>
 export type TransactionInput = z.infer<typeof createTransactionSchema>
@@ -106,10 +106,10 @@ export interface FinanceStore {
   saveReminderSettings(userId: string, input: ReminderSettingsInput): Promise<ReminderSettings>
   /** Everyone a daily reminder could reach; who actually gets one is decided per person. */
   reminderCandidates(): Promise<ReminderCandidate[]>
-  /** False when tonight's reminder was already claimed by another worker tick. */
-  claimReminderDelivery(userId: string, scheduledFor: Date): Promise<boolean>
-  settleReminderDelivery(userId: string, scheduledFor: Date, error?: string): Promise<void>
-  releaseReminderDelivery(userId: string, scheduledFor: Date): Promise<void>
+  /** False when this slot was already claimed by another worker tick. */
+  claimDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date): Promise<boolean>
+  settleDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date, error?: string): Promise<void>
+  releaseDelivery(userId: string, kind: DeliveryKind, scheduledFor: Date): Promise<void>
   /** Telegram says this chat is gone for good; stop writing to it. */
   revokeBotWriteAccess(telegramUserId: number): Promise<void>
   runWorkerBatch(): Promise<{ expiredMedia: number; forgottenUpdates: number }>

@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../server/app.js'
 import { MemoryFinanceStore } from '../server/store/memory.js'
-import { deliverDailyReminders } from '../server/telegram/delivery.js'
-import { reminderDueAt, zonedIsoWeekday, type ReminderCandidate } from '../server/telegram/reminders.js'
+import { runDeliveries } from '../server/telegram/delivery.js'
+import {
+  lastMonthRange, lastWeekRange, monthlyDigestDueAt, previousWeekRange,
+  reminderDueAt, weeklyDigestDueAt, zonedIsoWeekday, type ReminderCandidate,
+} from '../server/telegram/reminders.js'
 
 /** Monday 7 September 2026, 20:05 in Moscow — five minutes past the default. */
 const MONDAY_EVENING = new Date('2026-09-07T17:05:00Z')
@@ -15,6 +18,7 @@ const candidate = (overrides: Partial<ReminderCandidate> = {}): ReminderCandidat
   daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
   lastEntryAt: null,
   deliveredCount: 0,
+  lastDeliveryAt: null,
   ...overrides,
 })
 
@@ -52,6 +56,12 @@ describe('когда напоминание уходит', () => {
     expect(reminderDueAt(recordedToday, MONDAY_EVENING)).toBeNull()
   })
 
+  it('молчит, если сводка уже приходила сегодня', () => {
+    const digested = candidate({ lastDeliveryAt: new Date('2026-09-07T16:00:00Z') })
+
+    expect(reminderDueAt(digested, MONDAY_EVENING)).toBeNull()
+  })
+
   it('приходит, если последняя запись была вчера', () => {
     const recordedYesterday = candidate({ lastEntryAt: new Date('2026-09-06T18:00:00Z') })
 
@@ -73,6 +83,57 @@ describe('когда напоминание уходит', () => {
   it('считает воскресенье седьмым днём, а не нулевым', () => {
     expect(zonedIsoWeekday(new Date('2026-09-06T12:00:00Z'), 'Europe/Moscow')).toBe(7)
     expect(zonedIsoWeekday(MONDAY_EVENING, 'Europe/Moscow')).toBe(1)
+  })
+})
+
+
+/** Sunday 6 September 2026, 19:05 in Moscow. */
+const SUNDAY_EVENING = new Date('2026-09-06T16:05:00Z')
+/** Tuesday 1 September 2026, 12:05 in Moscow. */
+const FIRST_OF_MONTH = new Date('2026-09-01T09:05:00Z')
+
+describe('расписание сводок', () => {
+  const zone = 'Europe/Moscow'
+
+  it('недельная уходит вечером в воскресенье', () => {
+    expect(weeklyDigestDueAt(zone, SUNDAY_EVENING)?.toISOString()).toBe('2026-09-06T16:00:00.000Z')
+    expect(weeklyDigestDueAt(zone, MONDAY_EVENING)).toBeNull()
+    expect(weeklyDigestDueAt(zone, new Date('2026-09-06T13:00:00Z'))).toBeNull()
+  })
+
+  it('месячная уходит в полдень первого числа', () => {
+    expect(monthlyDigestDueAt(zone, FIRST_OF_MONTH)?.toISOString()).toBe('2026-09-01T09:00:00.000Z')
+    expect(monthlyDigestDueAt(zone, SUNDAY_EVENING)).toBeNull()
+  })
+
+  it('неделя считается с понедельника по текущий момент', () => {
+    const range = lastWeekRange(zone, SUNDAY_EVENING)
+
+    // Понедельник 31 августа, 00:00 по Москве — это 20:00 UTC 30 августа.
+    expect(range.start.toISOString()).toBe('2026-08-30T21:00:00.000Z')
+    expect(range.end).toBe(SUNDAY_EVENING)
+  })
+
+  it('предыдущая неделя примыкает к текущей, не перекрывая её', () => {
+    const current = lastWeekRange(zone, SUNDAY_EVENING)
+    const previous = previousWeekRange(zone, SUNDAY_EVENING)
+
+    expect(previous.end.getTime()).toBe(current.start.getTime() - 1)
+    expect(current.start.getTime() - previous.start.getTime()).toBe(7 * 86_400_000)
+  })
+
+  it('месячная сводка описывает прошедший месяц целиком', () => {
+    const range = lastMonthRange(zone, FIRST_OF_MONTH)
+
+    expect(range).toMatchObject({ year: 2026, month: 8 })
+    expect(range.start.toISOString()).toBe('2026-07-31T21:00:00.000Z')
+    expect(range.end.toISOString()).toBe('2026-08-31T20:59:59.999Z')
+  })
+
+  it('в январе отматывает на декабрь прошлого года', () => {
+    const range = lastMonthRange(zone, new Date('2026-01-01T09:05:00Z'))
+
+    expect(range).toMatchObject({ year: 2025, month: 12 })
   })
 })
 
@@ -107,8 +168,8 @@ describe('доставка напоминаний', () => {
     await enableReminders()
     const sent = telegram(200, { ok: true, result: { message_id: 1 } })
 
-    const first = await deliverDailyReminders(store, MONDAY_EVENING)
-    const second = await deliverDailyReminders(store, MONDAY_EVENING)
+    const first = await runDeliveries(store, MONDAY_EVENING)
+    const second = await runDeliveries(store, MONDAY_EVENING)
 
     expect(first).toMatchObject({ sent: 1 })
     expect(second).toMatchObject({ sent: 0, skipped: 1 })
@@ -120,7 +181,7 @@ describe('доставка напоминаний', () => {
     await enableReminders()
     const sent = telegram(200, { ok: true, result: { message_id: 1 } })
 
-    await deliverDailyReminders(store, MONDAY_EVENING)
+    await runDeliveries(store, MONDAY_EVENING)
 
     expect(sent[0]).toContain('раздел «Уведомления»')
   })
@@ -129,7 +190,7 @@ describe('доставка напоминаний', () => {
     await enableReminders()
     telegram(403, { ok: false, description: 'Forbidden: bot was blocked by the user' })
 
-    const report = await deliverDailyReminders(store, MONDAY_EVENING)
+    const report = await runDeliveries(store, MONDAY_EVENING)
 
     expect(report).toMatchObject({ revoked: 1, sent: 0 })
     expect(await store.reminderCandidates()).toHaveLength(0)
@@ -138,20 +199,119 @@ describe('доставка напоминаний', () => {
   it('возвращает слот в оборот после временной ошибки', async () => {
     await enableReminders()
     telegram(500, { ok: false, description: 'Internal Server Error' })
-    expect(await deliverDailyReminders(store, MONDAY_EVENING)).toMatchObject({ failed: 1 })
+    expect(await runDeliveries(store, MONDAY_EVENING)).toMatchObject({ failed: 1 })
 
     const sent = telegram(200, { ok: true, result: { message_id: 2 } })
-    expect(await deliverDailyReminders(store, MONDAY_EVENING)).toMatchObject({ sent: 1 })
+    expect(await runDeliveries(store, MONDAY_EVENING)).toMatchObject({ sent: 1 })
     expect(sent).toHaveLength(1)
   })
 
   it('не трогает того, кто напоминания не включал', async () => {
     const sent = telegram(200, { ok: true, result: { message_id: 1 } })
 
-    const report = await deliverDailyReminders(store, MONDAY_EVENING)
+    const report = await runDeliveries(store, MONDAY_EVENING)
 
     expect(report).toMatchObject({ sent: 0 })
     expect(sent).toHaveLength(0)
+  })
+})
+
+/** Воскресенье 1 марта 2026, 19:05 в Москве — заведомо в прошлом, иначе
+ *  расчёт сводки обрежет период по реальным «сейчас». */
+const PAST_SUNDAY_EVENING = new Date('2026-03-01T16:05:00Z')
+
+describe('сводка за неделю', () => {
+  let store: MemoryFinanceStore
+  let userId: string
+
+  beforeEach(async () => {
+    process.env.TELEGRAM_BOT_TOKEN = 'test-token'
+    store = new MemoryFinanceStore()
+    const session = await store.createSession({ id: 555, firstName: 'Алекс', lastName: null, username: 'alex', languageCode: 'ru', allowsWriteToPm: true }, 'Europe/Moscow')
+    userId = session.user.id
+    await store.saveReminderSettings(userId, { enabled: true, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] })
+  })
+
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  function telegram() {
+    const sent: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/sendMessage')) sent.push(JSON.parse(String(init?.body)).text as string)
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    return sent
+  }
+
+  /** Записывает расход на указанный день недели закрывающейся недели. */
+  async function spend(snapshot: Awaited<ReturnType<MemoryFinanceStore['snapshot']>>, occurredAt: string, amountKopecks: number, categoryName: string) {
+    const category = snapshot.categories.find((item) => item.name === categoryName && item.type === 'expense')!
+    await store.createTransaction(userId, {
+      workspaceId: snapshot.activeWorkspaceId,
+      type: 'expense',
+      amountKopecks,
+      accountId: snapshot.activeAccountId ?? snapshot.accounts[0]!.id,
+      categoryId: category.id,
+      occurredAt,
+      note: '',
+      source: 'manual',
+    }, `seed-${occurredAt}-${amountKopecks}`)
+  }
+
+  it('складывает неделю и сравнивает с предыдущей', async () => {
+    const snapshot = await store.snapshot(userId)
+    // Закрывающаяся неделя: понедельник 23 февраля — воскресенье 1 марта.
+    await spend(snapshot, '2026-02-23T09:00:00.000Z', 400_000, 'Продукты')
+    await spend(snapshot, '2026-02-26T09:00:00.000Z', 80_000, 'Продукты')
+    await spend(snapshot, '2026-03-01T09:00:00.000Z', 60_000, 'Транспорт')
+    // Предыдущая неделя: 16–22 февраля.
+    await spend(snapshot, '2026-02-17T09:00:00.000Z', 700_000, 'Продукты')
+    const sent = telegram()
+
+    const report = await runDeliveries(store, PAST_SUNDAY_EVENING)
+
+    expect(report).toMatchObject({ sent: 1 })
+    expect(sent[0]).toContain('Неделя закрыта')
+    // 5 400 ₽ за неделю против 7 000 ₽ неделей раньше — на 1 600 ₽ меньше.
+    expect(sent[0]!.replace(/[\u00a0\u202f]/g, ' ')).toContain('Потратил 5 400 ₽ — на 1 600 ₽ меньше')
+    expect(sent[0]).toContain('Больше всего ушло на Продукты')
+  })
+
+  it('без сравнения, когда предыдущей недели не было', async () => {
+    const snapshot = await store.snapshot(userId)
+    await spend(snapshot, '2026-02-23T09:00:00.000Z', 150_000, 'Продукты')
+    await spend(snapshot, '2026-03-01T09:00:00.000Z', 50_000, 'Продукты')
+    const sent = telegram()
+
+    await runDeliveries(store, PAST_SUNDAY_EVENING)
+
+    expect(sent[0]!.replace(/[\u00a0\u202f]/g, ' ')).toContain('Потратил 2 000 ₽.')
+    expect(sent[0]).not.toContain('чем неделей раньше')
+  })
+
+  it('молчит, когда наблюдений меньше недели', async () => {
+    const snapshot = await store.snapshot(userId)
+    // Одна запись в субботу: наблюдений два дня, выводы делать не на чем.
+    await spend(snapshot, '2026-02-28T09:00:00.000Z', 90_000, 'Продукты')
+    const sent = telegram()
+
+    await runDeliveries(store, PAST_SUNDAY_EVENING)
+
+    expect(sent).toHaveLength(0)
+  })
+
+  it('в воскресенье шлёт сводку вместо напоминания', async () => {
+    const snapshot = await store.snapshot(userId)
+    await spend(snapshot, '2026-02-23T09:00:00.000Z', 200_000, 'Продукты')
+    await spend(snapshot, '2026-03-01T09:00:00.000Z', 100_000, 'Продукты')
+    const sent = telegram()
+
+    await runDeliveries(store, PAST_SUNDAY_EVENING)
+    // Через час наступает время ежедневного напоминания — второго сообщения быть не должно.
+    await runDeliveries(store, new Date('2026-03-01T17:05:00Z'))
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('Неделя закрыта')
   })
 })
 

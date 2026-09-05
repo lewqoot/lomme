@@ -78,6 +78,13 @@
       "when": 1788600000000,
       "tag": "0010_bot_transaction_source",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788601000000,
+      "tag": "0011_delivery_kinds",
+      "breakpoints": true
     }
   ]
 }
