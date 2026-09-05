@@ -35,6 +35,7 @@ import type {
   StoreReadiness,
   TelegramUpdateClaim,
   SessionUser,
+  UserDataExport,
   TransactionInput,
   TransactionUpdate,
   WorkspaceInput,
@@ -153,6 +154,68 @@ export class MemoryFinanceStore implements FinanceStore {
   }
 
   async revokeSession(token: string) { this.sessions.delete(hashToken(token)) }
+
+  async exportUserData(userId: string): Promise<UserDataExport> {
+    const user = this.requireUser(userId)
+    const accounts = this.accessibleAccounts(userId)
+    const accountIds = new Set(accounts.map((account) => account.id))
+    const accountById = new Map(accounts.map((account) => [account.id, account]))
+    const transactions = [...this.transactions.entries()]
+      .flatMap(([workspaceId, items]) => items.map((item) => ({ workspaceId, item })))
+      .filter(({ item }) => accountIds.has(item.accountId) || Boolean(item.targetAccountId && accountIds.has(item.targetAccountId)))
+      .map(({ workspaceId, item }) => {
+        const category = (this.categories.get(workspaceId) || []).find((candidate) => candidate.id === item.categoryId)
+        const sourceAccessible = accountIds.has(item.accountId)
+        const targetAccessible = Boolean(item.targetAccountId && accountIds.has(item.targetAccountId))
+        return {
+          ...item,
+          accountId: sourceAccessible ? item.accountId : 'external',
+          targetAccountId: targetAccessible ? item.targetAccountId : null,
+          workspaceId,
+          accountName: sourceAccessible ? accountById.get(item.accountId)?.name ?? '' : 'Внешний кошелёк',
+          targetAccountName: targetAccessible && item.targetAccountId ? accountById.get(item.targetAccountId)?.name ?? null : null,
+          categoryName: category?.name ?? null,
+        }
+      })
+      .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt) || right.id.localeCompare(left.id))
+    return {
+      formatVersion: 1,
+      exportedAt: new Date().toISOString(),
+      user: this.publicUser(user),
+      accounts: accounts.map((account) => ({
+        id: account.id,
+        workspaceId: account.workspaceId,
+        workspaceName: this.workspaces.get(account.workspaceId)?.name ?? '',
+        name: account.name,
+        archivedAt: account.archivedAt,
+        accessRole: account.accessRole,
+      })),
+      transactions,
+    }
+  }
+
+  async deleteProfile(userId: string) {
+    const user = this.requireUser(userId)
+    const ownedWithMembers = this.accessibleAccounts(userId)
+      .some((account) => account.accessRole === 'owner' && (this.accountAccess.get(account.id)?.size ?? 0) > 1)
+    if (ownedWithMembers) throw new AppError(409, 'PROFILE_OWNS_SHARED_ACCOUNT', 'Сначала закрой доступ участникам общих кошельков')
+
+    for (const access of this.accountAccess.values()) access.delete(userId)
+    for (const [token, session] of this.sessions) if (session.userId === userId) this.sessions.delete(token)
+    for (const [workspaceId, workspace] of this.workspaces) {
+      if (workspace.ownerUserId !== userId) continue
+      this.workspaces.delete(workspaceId)
+      this.members.delete(workspaceId)
+      for (const account of this.accounts.get(workspaceId) || []) this.accountAccess.delete(account.id)
+      this.accounts.delete(workspaceId)
+      this.categories.delete(workspaceId)
+      this.transactions.delete(workspaceId)
+    }
+    this.quickKeys.delete(userId)
+    this.reminders.delete(userId)
+    this.usersByTelegram.delete(user.telegramUserId)
+    this.users.delete(userId)
+  }
 
   async snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, requestedAccountId?: string | null): Promise<AppSnapshot> {
     const user = this.requireUser(userId)

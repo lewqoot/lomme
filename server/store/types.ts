@@ -4,6 +4,7 @@ import type {
   AppSnapshot,
   AccountInvitePreview,
   TransactionPage,
+  TransactionView,
   authTelegramSchema,
   createAccountSchema,
   createCategorySchema,
@@ -96,6 +97,26 @@ export type SessionUser = {
   timezone: string
 }
 
+export type UserDataExport = {
+  formatVersion: 1
+  exportedAt: string
+  user: SessionUser
+  accounts: Array<{
+    id: string
+    workspaceId: string
+    workspaceName: string
+    name: string
+    archivedAt: string | null
+    accessRole: 'owner' | 'editor'
+  }>
+  transactions: Array<TransactionView & {
+    workspaceId: string
+    accountName: string
+    targetAccountName: string | null
+    categoryName: string | null
+  }>
+}
+
 export interface FinanceStore {
   createSession(identity: TelegramIdentity, timezone: string): Promise<{ token: string; user: SessionUser }>
   userForSession(token: string): Promise<SessionUser | null>
@@ -114,6 +135,8 @@ export interface FinanceStore {
   /** Marks the confirmation for an update as delivered. */
   markTelegramUpdateDelivered(updateId: number): Promise<void>
   revokeSession(token: string): Promise<void>
+  exportUserData(userId: string): Promise<UserDataExport>
+  deleteProfile(userId: string): Promise<void>
   snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, accountId?: string | null): Promise<AppSnapshot>
   transactionsPage(userId: string, workspaceId: string, range: SnapshotRange, cursor?: string, limit?: number, accountId?: string | null): Promise<TransactionPage>
   createTransaction(userId: string, input: TransactionInput, idempotencyKey: string): Promise<{ id: string }>

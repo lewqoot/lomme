@@ -4,12 +4,12 @@ import { useMutation } from '@tanstack/react-query'
 import {
   ArrowDownLeft, Check, ChevronLeft,
   ChevronRight, CircleSlash2, Copy, LoaderCircle, Zap, Download,
-  LayoutGrid, Mail, Settings2, Users, Bell,
+  ExternalLink, FileJson, LayoutGrid, Mail, Settings2, ShieldCheck, Trash2, Users, Bell,
 } from 'lucide-react'
 import { api, ApiError, haptic } from '../../lib/api'
 import { copyText } from '../../lib/telegram'
 
-type SettingsScreen = 'root' | 'automations' | 'notifications'
+type SettingsScreen = 'root' | 'automations' | 'notifications' | 'support' | 'data'
 type SettingsMotion = 'idle' | 'enter' | 'return'
 const SETTINGS_NAVIGATION_DURATION_MS = 240
 type Props = {
@@ -54,6 +54,8 @@ export function SettingsPage({ backRef, notify, onNavigate, onClose, initialScre
   const enterMotion = screenMotion === 'enter' ? ' motion-enter-push' : ''
   if (screen === 'automations') return <AutomationsScreen motion={enterMotion} onBack={back} notify={notify} />
   if (screen === 'notifications') return <NotificationsScreen motion={enterMotion} onBack={back} notify={notify} />
+  if (screen === 'support') return <SupportScreen motion={enterMotion} onBack={back} />
+  if (screen === 'data') return <DataScreen motion={enterMotion} onBack={back} notify={notify} />
 
   return <div className={`settings-screen${screenMotion === 'return' ? ' motion-return-push' : ''}`}>
     <SettingsHeader title="Настройки" onBack={onClose} />
@@ -69,8 +71,100 @@ export function SettingsPage({ backRef, notify, onNavigate, onClose, initialScre
     </SettingsSection>
 
     <SettingsSection title="Поддержка">
-      <SettingsRow icon={<Mail />} label="Помощь и поддержка" muted />
+      <SettingsRow icon={<Mail />} label="Помощь и поддержка" onClick={() => open('support')} />
+      <SettingsRow icon={<ShieldCheck />} label="Данные и профиль" onClick={() => open('data')} />
     </SettingsSection>
+  </div>
+}
+
+const supportUrl = (() => {
+  const configured = import.meta.env.VITE_SUPPORT_URL?.trim()
+  if (configured) return configured
+  const username = import.meta.env.VITE_TELEGRAM_BOT_USERNAME?.trim().replace(/^@/, '')
+  return username ? `https://t.me/${username}?start=support` : null
+})()
+
+function SupportScreen({ motion, onBack }: { motion: string; onBack(): void }) {
+  return <div className={`settings-subscreen public-info-screen${motion}`}>
+    <SettingsHeader title="Помощь" onBack={onBack} />
+    <section className="public-info-card">
+      <h2>Что можно решить здесь</h2>
+      <p>Если запись не появилась, сначала проверь интернет и обнови Lomme. Повтор с тем же идентификатором не создаст вторую трату.</p>
+      <p>Доступ к общему кошельку можно закрыть на экране «Семейный кошелёк». Личные кошельки других людей при этом не затрагиваются.</p>
+    </section>
+    <section className="public-info-card">
+      <h2>Связаться с поддержкой</h2>
+      <p>Опиши, что произошло, модель телефона и примерное время ошибки. Не отправляй ключ быстрого ввода, cookies или Telegram initData.</p>
+      {supportUrl
+        ? <a className="public-info-action" href={supportUrl} target="_blank" rel="noreferrer"><Mail />Написать в поддержку<ExternalLink /></a>
+        : <p className="form-error">Контакт поддержки ещё не настроен оператором.</p>}
+    </section>
+  </div>
+}
+
+type ExportPayload = { exportedAt: string; accounts: unknown[]; transactions: unknown[] }
+
+async function saveExport(payload: ExportPayload) {
+  const text = `${JSON.stringify(payload, null, 2)}\n`
+  const file = new File([text], `lomme-export-${payload.exportedAt.slice(0, 10)}.json`, { type: 'application/json' })
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Экспорт Lomme' })
+      return
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      // Desktop Telegram and some WebViews advertise file sharing but reject it
+      // at invocation time. The ordinary download remains a complete fallback.
+    }
+  }
+  const url = URL.createObjectURL(file)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = file.name
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
+}
+
+function DataScreen({ motion, onBack, notify }: { motion: string; onBack(): void; notify(text: string): void }) {
+  const exportData = useMutation({
+    mutationFn: () => api<ExportPayload>('/me/export'),
+    onSuccess: async (payload) => {
+      try { await saveExport(payload); notify('Экспорт подготовлен') }
+      catch { notify('Не удалось сохранить экспорт') }
+    },
+    onError: (error) => notify(error instanceof Error ? error.message : 'Не удалось подготовить экспорт'),
+  })
+  const deleteProfile = useMutation({
+    mutationFn: () => api('/me', { method: 'DELETE', body: JSON.stringify({ confirmation: 'УДАЛИТЬ' }) }),
+    onSuccess: () => window.location.reload(),
+    onError: (error) => notify(error instanceof Error ? error.message : 'Не удалось удалить профиль'),
+  })
+  const confirmDelete = () => {
+    const confirmation = window.prompt('Профиль, личные кошельки и ключ быстрого ввода будут удалены. Для подтверждения напиши УДАЛИТЬ')
+    if (confirmation === 'УДАЛИТЬ') deleteProfile.mutate()
+  }
+
+  return <div className={`settings-subscreen public-info-screen${motion}`}>
+    <SettingsHeader title="Данные и профиль" onBack={onBack} />
+    <section className="public-info-card">
+      <FileJson />
+      <h2>Экспорт данных</h2>
+      <p>Файл содержит профиль, доступные тебе кошельки и их операции, включая архивные. Чужие кошельки без действующего доступа в экспорт не попадут.</p>
+      <button className="public-info-action" type="button" disabled={exportData.isPending} onClick={() => exportData.mutate()}>{exportData.isPending ? <LoaderCircle className="spin" /> : <Download />}Скачать JSON</button>
+    </section>
+    <section className="public-info-card">
+      <ShieldCheck />
+      <h2>Как обрабатываются данные</h2>
+      <p>Lomme хранит профиль Telegram, кошельки, категории, операции и настройки, чтобы вести учёт и показывать аналитику. Ключ быстрого ввода хранится только как необратимый хеш.</p>
+      <p>Участник общего кошелька видит его операции, пока у него есть доступ. После выхода или отзыва доступа этот кошелёк и его история перестают быть доступны.</p>
+    </section>
+    <section className="public-info-card danger-zone">
+      <Trash2 />
+      <h2>Удалить профиль</h2>
+      <p>Личные пространства станут недоступны, сессии и ключ быстрого ввода будут отозваны. Финансовые записи в общем кошельке сохранятся без Telegram-имени, чтобы не ломать историю других участников.</p>
+      <p>Если у твоего кошелька есть участники, сначала закрой им доступ — владелец не может оставить общий кошелёк без владельца.</p>
+      <button className="danger-text-button wide" type="button" disabled={deleteProfile.isPending} onClick={confirmDelete}>{deleteProfile.isPending ? <LoaderCircle className="spin" /> : <Trash2 />}Удалить профиль</button>
+    </section>
   </div>
 }
 

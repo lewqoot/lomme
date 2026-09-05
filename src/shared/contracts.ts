@@ -138,6 +138,9 @@ export const authTelegramSchema = z.object({
   initData: z.string().default(''),
   timezone: timeZoneSchema.default('Europe/Moscow'),
 })
+export const deleteProfileSchema = z.object({
+  confirmation: z.literal('УДАЛИТЬ'),
+})
 
 /**
  * The first public Telegram build was a design preview which kept its ledger in

@@ -1042,4 +1042,16 @@ function Loading() {
   return <main className="app-shell state-screen"><LoaderCircle className="spin" /></main>
 }
 
-function AuthError({ error, retry }: { error: unknown; retry(): void }) { const message = error instanceof ApiError ? error.message : 'Не удалось открыть приложение'; return <main className="app-shell state-screen"><div className="logo-mark error"><BriefcaseBusiness /></div><h1>Не получилось войти</h1><p>{message}</p><button className="primary-button" onClick={retry}>Попробовать снова</button></main> }
+function AuthError({ error, retry }: { error: unknown; retry(): void }) {
+  const apiError = error instanceof ApiError ? error : null
+  const message = apiError?.message ?? 'Не удалось открыть приложение'
+  const username = import.meta.env.VITE_TELEGRAM_BOT_USERNAME?.trim().replace(/^@/, '')
+  const telegramAuthError = apiError?.code.startsWith('TELEGRAM_')
+  return <main className="app-shell state-screen">
+    <div className="logo-mark error"><BriefcaseBusiness /></div>
+    <h1>{telegramAuthError ? 'Открой Lomme в Telegram' : 'Не получилось войти'}</h1>
+    <p>{telegramAuthError ? 'Для безопасного входа нужен свежий запуск из Telegram.' : message}</p>
+    {telegramAuthError && username && <a className="primary-button" href={`https://t.me/${username}?startapp=home&mode=fullscreen`}>Открыть в Telegram</a>}
+    <button className="secondary-button" onClick={retry}>Попробовать снова</button>
+  </main>
+}

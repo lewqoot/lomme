@@ -29,6 +29,7 @@ import type {
   QuickEntryResult,
   StoreReadiness,
   TelegramUpdateClaim,
+  UserDataExport,
   ReminderSettingsInput,
   SharedActivity,
   AccountUpdate,
@@ -167,6 +168,100 @@ export class PostgresFinanceStore implements FinanceStore {
   }
 
   async revokeSession(token: string) { await this.pool.query(`DELETE FROM sessions WHERE token_hash=$1`, [hashToken(token)]) }
+
+  async exportUserData(userId: string): Promise<UserDataExport> {
+    const userResult = await this.pool.query(
+      `SELECT id,first_name,username,timezone FROM users WHERE id=$1 AND deleted_at IS NULL`, [userId])
+    if (!userResult.rowCount) throw forbidden()
+    const accountResult = await this.pool.query(`SELECT a.id,a.workspace_id,w.name AS workspace_name,a.name,a.archived_at,am.role AS access_role
+      FROM account_members am
+      JOIN accounts a ON a.id=am.account_id
+      JOIN workspaces w ON w.id=a.workspace_id AND w.deleted_at IS NULL
+      WHERE am.user_id=$1
+      ORDER BY w.created_at,a.created_at`, [userId])
+    const transactionResult = await this.pool.query(`WITH accessible AS MATERIALIZED (
+        SELECT a.id FROM account_members am JOIN accounts a ON a.id=am.account_id
+        JOIN workspaces w ON w.id=a.workspace_id AND w.deleted_at IS NULL
+        WHERE am.user_id=$1
+      )
+      SELECT t.*,w.name AS workspace_name,
+        t.account_id IN (SELECT id FROM accessible) AS source_accessible,
+        t.target_account_id IN (SELECT id FROM accessible) AS target_accessible,
+        CASE WHEN t.account_id IN (SELECT id FROM accessible) THEN a.name ELSE 'Внешний кошелёк' END AS account_name,
+        CASE WHEN t.target_account_id IN (SELECT id FROM accessible) THEN target.name ELSE NULL END AS target_account_name,
+        c.name AS category_name,COALESCE(u.first_name,'Удалённый пользователь') AS author_name
+      FROM transactions t
+      JOIN workspaces w ON w.id=t.workspace_id AND w.deleted_at IS NULL
+      JOIN accounts a ON a.id=t.account_id
+      LEFT JOIN accounts target ON target.id=t.target_account_id
+      LEFT JOIN categories c ON c.id=t.category_id
+      LEFT JOIN users u ON u.id=t.created_by_user_id
+      WHERE t.deleted_at IS NULL
+        AND (t.account_id IN (SELECT id FROM accessible) OR t.target_account_id IN (SELECT id FROM accessible))
+      ORDER BY t.occurred_at DESC,t.id DESC`, [userId])
+    return {
+      formatVersion: 1,
+      exportedAt: new Date().toISOString(),
+      user: userRow(userResult.rows[0]),
+      accounts: accountResult.rows.map((row) => ({
+        id: row.id as string,
+        workspaceId: row.workspace_id as string,
+        workspaceName: row.workspace_name as string,
+        name: row.name as string,
+        archivedAt: row.archived_at ? new Date(row.archived_at as string).toISOString() : null,
+        accessRole: row.access_role as 'owner' | 'editor',
+      })),
+      transactions: transactionResult.rows.map((row) => {
+        const transaction = transactionRow(row)
+        return {
+          ...transaction,
+          accountId: row.source_accessible ? transaction.accountId : 'external',
+          targetAccountId: row.target_accessible ? transaction.targetAccountId : null,
+          workspaceId: row.workspace_id as string,
+          accountName: row.account_name as string,
+          targetAccountName: row.target_account_name as string | null,
+          categoryName: row.category_name as string | null,
+        }
+      }),
+    }
+  }
+
+  async deleteProfile(userId: string) {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const sharedAccount = await client.query(`SELECT am.account_id FROM account_members am
+        WHERE am.user_id=$1 AND am.role='owner'
+          AND EXISTS (SELECT 1 FROM account_members other WHERE other.account_id=am.account_id AND other.user_id<>$1)
+        LIMIT 1 FOR UPDATE`, [userId])
+      const sharedWorkspace = await client.query(`SELECT w.id FROM workspaces w
+        WHERE w.owner_user_id=$1 AND w.kind='family' AND w.deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.workspace_id=w.id AND wm.user_id<>$1)
+        LIMIT 1 FOR UPDATE`, [userId])
+      if (sharedAccount.rowCount || sharedWorkspace.rowCount) {
+        throw new AppError(409, 'PROFILE_OWNS_SHARED_ACCOUNT', 'Сначала закрой доступ участникам общих кошельков')
+      }
+      await client.query(`UPDATE account_invites SET revoked_at=now()
+        WHERE created_by_user_id=$1 AND used_at IS NULL AND revoked_at IS NULL`, [userId])
+      await client.query(`UPDATE workspace_invites SET expires_at=now()
+        WHERE created_by_user_id=$1 AND used_at IS NULL`, [userId])
+      await client.query(`DELETE FROM account_members WHERE user_id=$1`, [userId])
+      await client.query(`DELETE FROM workspace_members WHERE user_id=$1`, [userId])
+      await client.query(`UPDATE workspaces SET deleted_at=now(),updated_at=now(),version=version+1
+        WHERE owner_user_id=$1 AND deleted_at IS NULL`, [userId])
+      await client.query(`DELETE FROM sessions WHERE user_id=$1`, [userId])
+      await client.query(`UPDATE users SET first_name='Удалённый пользователь',last_name=NULL,username=NULL,
+        quick_key_hash=NULL,quick_key_issued_at=NULL,bot_write_access=false,
+        active_workspace_id=NULL,active_account_id=NULL,deleted_at=now(),updated_at=now()
+        WHERE id=$1 AND deleted_at IS NULL`, [userId])
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+  }
 
   async snapshot(userId: string, workspaceId?: string, range?: SnapshotRange, requestedAccountId?: string | null): Promise<AppSnapshot> {
     const userResult = await this.pool.query(`SELECT id,first_name,username,timezone,active_workspace_id,active_account_id FROM users WHERE id=$1 AND deleted_at IS NULL`, [userId])

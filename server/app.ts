@@ -16,6 +16,7 @@ import {
   createCategorySchema,
   createTransactionSchema,
   createWorkspaceSchema,
+  deleteProfileSchema,
   inviteTokenSchema,
   legacyPreviewMigrationSchema,
   quickEntrySchema,
@@ -40,7 +41,8 @@ declare module 'fastify' {
   interface FastifyRequest { currentUser?: SessionUser }
 }
 
-const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
+const DEFAULT_TELEGRAM_INIT_MAX_AGE_SECONDS = 5 * 60
+const LEGACY_TELEGRAM_INIT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 const DEFAULT_SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/7904d226526a4e64ac8fa14599f065f5'
 
 function telegramInitMaxAgeSeconds() {
@@ -267,6 +269,18 @@ export async function buildApp(store: FinanceStore) {
       }
       catch (error) {
         const code = error instanceof Error ? error.message : 'TELEGRAM_AUTH_INVALID'
+        if (code === 'TELEGRAM_AUTH_EXPIRED' && request.cookies.lomme_session) {
+          const sessionUser = await store.userForSession(request.cookies.lomme_session)
+          if (sessionUser) {
+            try {
+              const legacyIdentity = validateTelegramInitData(input.initData, process.env.TELEGRAM_BOT_TOKEN || '', LEGACY_TELEGRAM_INIT_MAX_AGE_SECONDS)
+              const sessionTelegramId = await store.telegramUserIdFor(sessionUser.id)
+              if (sessionTelegramId === legacyIdentity.id) {
+                return reply.send({ user: sessionUser, startParam: telegramStartParam(input.initData) })
+              }
+            } catch { /* the original short-window error is the public result */ }
+          }
+        }
         throw new AppError(401, code, code === 'TELEGRAM_AUTH_EXPIRED' ? 'Авторизация Telegram устарела' : 'Не удалось проверить авторизацию Telegram')
       }
     }
@@ -277,6 +291,15 @@ export async function buildApp(store: FinanceStore) {
 
   app.delete('/api/v1/session', { preHandler: requireUser }, async (request, reply) => {
     if (request.cookies.lomme_session) await store.revokeSession(request.cookies.lomme_session)
+    reply.clearCookie('lomme_session', { path: '/' })
+    return reply.code(204).send()
+  })
+
+  app.get('/api/v1/me/export', { preHandler: requireUser }, async (request, reply) =>
+    reply.header('Cache-Control', 'no-store').send(await store.exportUserData(request.currentUser!.id)))
+  app.delete('/api/v1/me', { preHandler: requireUser }, async (request, reply) => {
+    parse(deleteProfileSchema, request.body)
+    await store.deleteProfile(request.currentUser!.id)
     reply.clearCookie('lomme_session', { path: '/' })
     return reply.code(204).send()
   })
@@ -358,7 +381,7 @@ export async function buildApp(store: FinanceStore) {
   app.post('/api/v1/migrations/design-preview', { config: { rateLimit: { max: 8, timeWindow: '1 hour' } } }, async (request) => {
     const input = parse(legacyPreviewMigrationSchema, request.body)
     let identity: TelegramIdentity
-    try { identity = validateTelegramInitData(input.initData, process.env.TELEGRAM_BOT_TOKEN || '', telegramInitMaxAgeSeconds()) }
+    try { identity = validateTelegramInitData(input.initData, process.env.TELEGRAM_BOT_TOKEN || '', LEGACY_TELEGRAM_INIT_MAX_AGE_SECONDS) }
     catch (error) {
       const code = error instanceof Error ? error.message : 'TELEGRAM_AUTH_INVALID'
       request.log.warn({ event: 'legacy_preview_migration_rejected', code }, 'Legacy preview migration rejected')
