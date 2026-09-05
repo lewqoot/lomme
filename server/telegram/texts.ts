@@ -7,6 +7,7 @@
  * screen is worse than no button.
  */
 
+import type { QuickRejection } from '../../src/shared/quick-entry.js'
 import type { BotMessage, InlineKeyboard } from './api.js'
 
 /** Shown on the button beside the message input. */
@@ -167,7 +168,33 @@ export function entryGone(): BotMessage {
   return { text: 'Этой записи уже нет.' }
 }
 
-export function amountNotFound(): BotMessage {
+/**
+ * Why a line was not recorded. Each answer names the thing that was unclear
+ * and shows the form that works, because the alternative — recording a
+ * plausible guess — is how a thousands separator turned 1234,56 into 1,23.
+ */
+export function notRecorded(reason: QuickRejection): BotMessage {
+  if (reason === 'grouping') {
+    return { text: ['🤔 Не понял сумму', '', 'Разряды пиши пробелом: 1 234,56 продукты'].join('\n') }
+  }
+  if (reason === 'several-amounts') {
+    return { text: ['🤔 В строке два числа', '', 'Оставь одно: 1250 такси'].join('\n') }
+  }
+  if (reason === 'arithmetic') {
+    return { text: ['🤔 Считать пока не умею', '', 'Напиши итог: 500 такси'].join('\n') }
+  }
+  if (reason === 'shorthand') {
+    return { text: ['🤔 Не понял сокращение', '', 'Напиши сумму полностью: 1000 продукты'].join('\n') }
+  }
+  if (reason === 'income') {
+    return {
+      text: [
+        'Похоже, это доход, а я записываю только траты.',
+        '',
+        'Доходы пока добавляются в приложении.',
+      ].join('\n'),
+    }
+  }
   return { text: '🤔 Не нашёл сумму\n\nНапиши так: 450 кофе или кофе 450' }
 }
 

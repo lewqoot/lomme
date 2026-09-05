@@ -27,7 +27,7 @@ import {
   updateTransactionSchema,
   uuidSchema,
 } from '../src/shared/contracts.js'
-import { parseQuickAmount, splitQuickInput } from '../src/shared/quick-entry.js'
+import { parseQuickAmount, parseQuickLine, type QuickRejection } from '../src/shared/quick-entry.js'
 import { telegramStartParam, validateTelegramInitData, type TelegramIdentity } from './auth/telegram.js'
 import { answerCallbackQuery, editMessage, sendMessage } from './telegram/api.js'
 import { accountInviteAccepted } from './telegram/texts.js'
@@ -82,6 +82,13 @@ export function shortcutErrorText(code: string) {
   if (code === 'QUICK_KEY_INVALID' || code === 'QUICK_KEY_MISSING') {
     return '🔑 Ключ больше не работает\nОткрой Lomme → Настройки → Быстрый ввод'
   }
+  // The shortcut and the bot reject the same lines for the same reasons, and
+  // say so in the same words — only the notification is one line shorter.
+  if (code === 'QUICK_GROUPING') return '🤔 Не понял сумму\nРазряды пиши пробелом: 1 234,56 продукты'
+  if (code === 'QUICK_SEVERAL_AMOUNTS') return '🤔 В строке два числа\nОставь одно: 1250 такси'
+  if (code === 'QUICK_ARITHMETIC') return '🤔 Считать пока не умею\nНапиши итог: 500 такси'
+  if (code === 'QUICK_SHORTHAND') return '🤔 Не понял сокращение\nНапиши сумму полностью: 1000 продукты'
+  if (code === 'QUICK_INCOME') return 'Это похоже на доход\nДоходы пока добавляются в приложении'
   if (code === 'QUICK_AMOUNT_INVALID' || code === 'VALIDATION_ERROR') {
     return '🤔 Не нашёл сумму\nНапример: 1250 такси'
   }
@@ -100,6 +107,16 @@ const WEBHOOK_PATH_SECRET = /^\/api\/v1\/telegram\/webhook\/[^/?]+/
 function telegramWebAppUrl() {
   const value = process.env.APP_URL?.trim()
   return value && value.startsWith('https://') ? value : null
+}
+
+/** One rejection, one error code, so both channels can answer identically. */
+const REJECTION_CODES: Record<QuickRejection, string> = {
+  'no-amount': 'QUICK_AMOUNT_INVALID',
+  'several-amounts': 'QUICK_SEVERAL_AMOUNTS',
+  grouping: 'QUICK_GROUPING',
+  arithmetic: 'QUICK_ARITHMETIC',
+  shorthand: 'QUICK_SHORTHAND',
+  income: 'QUICK_INCOME',
 }
 
 function normalizedBotUsername(value?: string) {
@@ -436,8 +453,9 @@ export async function buildApp(store: FinanceStore) {
     const query = request.query as { q?: string; amount?: string; text?: string }
     // `q` is the whole thing in one field ("1250 такси") — that keeps the shortcut
     // down to two actions. `amount`/`text` stay for a shortcut with two prompts.
-    const split = query.q ? splitQuickInput(query.q) : null
-    if (query.q && !split) throw new AppError(400, 'VALIDATION_ERROR', 'Не нашёл сумму в тексте')
+    const parsed = query.q ? parseQuickLine(query.q) : null
+    if (parsed?.status === 'rejected') throw new AppError(400, REJECTION_CODES[parsed.reason], 'Не удалось разобрать строку')
+    const split = parsed?.status === 'ok' ? parsed : null
     const result = await recordQuick(bearerFrom(request.headers.authorization), {
       amount: split?.amount ?? query.amount ?? '', text: split?.text ?? query.text ?? '',
     })

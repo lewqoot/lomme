@@ -5,7 +5,7 @@
  * what it is handed, so every branch below is testable without a live bot.
  */
 
-import { splitQuickInput } from '../../src/shared/quick-entry.js'
+import { parseQuickLine } from '../../src/shared/quick-entry.js'
 import type { BotMessage } from './api.js'
 import * as texts from './texts.js'
 
@@ -181,10 +181,10 @@ export async function routeUpdate(update: TelegramUpdate, context: RouterContext
   // "не нашёл сумму" to "привет" would be a non sequitur.
   if (!HAS_DIGIT.test(text) || telegramUserId === null) return send(texts.fallback(context.links))
 
-  const split = splitQuickInput(text)
-  if (!split) return send(texts.amountNotFound())
+  const parsed = parseQuickLine(text)
+  if (parsed.status === 'rejected') return send(texts.notRecorded(parsed.reason))
 
-  const outcome = await context.recordEntry(telegramUserId, split.amount, split.text)
+  const outcome = await context.recordEntry(telegramUserId, parsed.amount, parsed.text)
   if (outcome.status === 'no-account') return send(texts.noAccountYet(context.links))
   if (outcome.status === 'failed') return send(texts.couldNotRecord())
   return send(confirmation(outcome.entry))

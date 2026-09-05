@@ -206,23 +206,137 @@ export function resolveQuickEntry(
 /** Amounts arrive as free text from a number field: "1 250,50", "80", "12.5". */
 export function parseQuickAmount(value: string | number): number | null {
   if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null
-  const cleaned = value.replace(/\s| /g, '').replace(',', '.')
+  const cleaned = value.replace(/\s| | /g, '').replace(',', '.')
   if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null
   const amount = Math.round(Number(cleaned) * 100)
   return amount > 0 ? amount : null
 }
 
-const NUMBER = String.raw`\d[\d\s ]*(?:[.,]\d{1,2})?`
+/**
+ * Why a line could not be turned into an expense. Each reason names something
+ * the person can act on, because the alternative — guessing — is how
+ * "1.234,56 продукты" quietly became 1,23 ₽.
+ */
+export type QuickRejection =
+  | 'no-amount'
+  | 'several-amounts'
+  | 'grouping'
+  | 'arithmetic'
+  | 'shorthand'
+  | 'income'
+
+export type QuickLine =
+  | { status: 'ok'; amount: string; text: string }
+  | { status: 'rejected'; reason: QuickRejection }
+
+/** Digits, optionally grouped by spaces, with at most two decimals. */
+const AMOUNT = String.raw`\d{1,3}(?:[\s  ]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?`
+const AMOUNT_ONLY = new RegExp(String.raw`^(?:${AMOUNT})$`)
+/** Any run of digits, however it is written — used to count what is in the line. */
+/** A word made only of digits and their separators, e.g. "1250", "12.5", "3". */
+const NUMERIC_WORD = /^\d+(?:[.,]\d+)?$/
+
+/** Words that mean money coming in. Recording these as spending is worse than refusing. */
+const INCOME_WORDS = new Set([
+  'зарплата', 'зп', 'аванс', 'премия', 'доход', 'пенсия', 'стипендия', 'кэшбек', 'кешбек',
+  'кэшбэк', 'вернули', 'возврат', 'подработка', 'дивиденды', 'проценты', 'выплата',
+])
 
 /**
- * One free-text field is the shortest shortcut a person can build by hand, so the
- * amount and the note arrive glued together: "1250 такси", "такси 300".
+ * Words that make a nearby number a time rather than a price: "встреча в 5
+ * утра" is not five roubles. Only checked for a number sitting mid-sentence,
+ * where the line reads as prose rather than as an entry.
+ */
+const CLOCK_WORDS = new Set([
+  'утра', 'утром', 'вечера', 'вечером', 'дня', 'днем', 'ночи', 'ночью',
+  'часов', 'часа', 'час', 'минут', 'минуты', 'мин', 'ч',
+])
+
+const normaliseWord = (value: string) => value.toLocaleLowerCase('ru').replaceAll('ё', 'е').replace(/[^\p{L}\p{N}]/gu, '')
+
+/**
+ * Reads one free-text line as "amount + description", or explains why it cannot.
+ *
+ * The old rule took whatever numeric prefix it could and left the rest in the
+ * note, so a thousands separator, an arithmetic expression or a "1к" shorthand
+ * each produced a plausible-looking but wrong amount with no warning at all.
+ * This one accepts a line only when exactly one token is a well-formed amount
+ * and everything else is description.
+ */
+export function parseQuickLine(raw: string): QuickLine {
+  const value = raw.trim()
+  if (!value) return { status: 'rejected', reason: 'no-amount' }
+
+  const words = value.split(/[\s  ]+/)
+  if (words.some((word) => INCOME_WORDS.has(normaliseWord(word)) || word.startsWith('+'))) {
+    return { status: 'rejected', reason: 'income' }
+  }
+  if (/\d[+\-*/x×]\d|\d\s*[+*/×]\s*\d/.test(value)) return { status: 'rejected', reason: 'arithmetic' }
+  // "1к", "5 тыс", "300р" — shorthands and currency suffixes this grammar
+  // refuses to invent a value for. The word boundary is spelled out because
+  // \b is defined on Latin word characters and never fires after "к".
+  if (/\d[\s  ]*(?:кк|к|k|тыс|т|млн|м|руб|р|₽|\$|€)(?![\p{L}\d])/iu.test(value)) {
+    return { status: 'rejected', reason: 'shorthand' }
+  }
+
+  // A grouped amount is written with spaces, so "3 200 продукты" is one amount
+  // spread over two words. Rebuild it before counting how many numbers there are.
+  const grouped = groupedAmount(words)
+  if (grouped) return { status: 'ok', amount: grouped.amount, text: grouped.text }
+
+  const numeric = words.filter((word) => NUMERIC_WORD.test(word))
+  // Two separate numbers in one line have no obvious reading: "такси 1 2" is
+  // not 12 ₽, and it is not 2 ₽ either. Ask rather than pick one.
+  if (numeric.length > 1) return { status: 'rejected', reason: 'several-amounts' }
+
+  if (numeric.length === 1 && AMOUNT_ONLY.test(numeric[0]!)) {
+    const amount = numeric[0]!
+    const at = words.indexOf(amount)
+    const midSentence = at > 0 && at < words.length - 1
+    // The number may sit mid-sentence — "Потратил 300 на кофе" — and with only
+    // one number present there is nothing ambiguous about taking it. Unless the
+    // next word turns it into a clock reading.
+    if (midSentence && CLOCK_WORDS.has(normaliseWord(words[at + 1]!))) {
+      return { status: 'rejected', reason: 'no-amount' }
+    }
+    return { status: 'ok', amount, text: [...words.slice(0, at), ...words.slice(at + 1)].join(' ') }
+  }
+
+  if (!/\d/.test(value)) return { status: 'rejected', reason: 'no-amount' }
+  // Digits are present but no word is a clean amount: they are glued to
+  // something, like the thousands separator in "1.234,56".
+  return { status: 'rejected', reason: /\d[.,]\d{3}/.test(value) ? 'grouping' : 'no-amount' }
+}
+
+/**
+ * "3 200 продукты" and "продукты 3 200": digits split across words by the
+ * thousands separator people actually type.
+ */
+function groupedAmount(words: string[]) {
+  const runFrom = (index: number, step: 1 | -1) => {
+    const parts: string[] = []
+    for (let i = index; i >= 0 && i < words.length; i += step) {
+      if (!/^\d{1,3}(?:[.,]\d{1,2})?$/.test(words[i]!)) break
+      parts.push(words[i]!)
+    }
+    return step === 1 ? parts : parts.reverse()
+  }
+  const head = runFrom(0, 1)
+  if (head.length > 1 && head.length < words.length && AMOUNT_ONLY.test(head.join(' '))) {
+    return { amount: head.join(' '), text: words.slice(head.length).join(' ') }
+  }
+  const tail = runFrom(words.length - 1, -1)
+  if (tail.length > 1 && tail.length < words.length && AMOUNT_ONLY.test(tail.join(' '))) {
+    return { amount: tail.join(' '), text: words.slice(0, words.length - tail.length).join(' ') }
+  }
+  return null
+}
+
+/**
+ * Kept for the two-field shortcut, which sends the amount separately and has
+ * no line to parse. New callers use `parseQuickLine`.
  */
 export function splitQuickInput(raw: string): { amount: string; text: string } | null {
-  const value = raw.trim()
-  const leading = new RegExp(String.raw`^(${NUMBER})\s*(.*)$`).exec(value)
-  if (leading) return { amount: leading[1]!.trim(), text: leading[2]!.trim() }
-  const trailing = new RegExp(String.raw`^(.*?)\s+(${NUMBER})$`).exec(value)
-  if (trailing) return { amount: trailing[2]!.trim(), text: trailing[1]!.trim() }
-  return null
+  const parsed = parseQuickLine(raw)
+  return parsed.status === 'ok' ? { amount: parsed.amount, text: parsed.text } : null
 }
