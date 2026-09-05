@@ -440,14 +440,26 @@ export async function buildApp(store: FinanceStore) {
    * The only endpoint a shortcut can reach. It authenticates with the personal key
    * instead of a session, and can do exactly one thing: record an expense.
    */
-  const recordQuick = async (key: string, payload: unknown) => {
+  const recordQuick = async (key: string, payload: unknown, runId?: string) => {
     if (!key) throw new AppError(401, 'QUICK_KEY_MISSING', 'Нужен ключ')
-    return store.createQuickEntry(key, parse(quickEntrySchema, payload))
+    return store.createQuickEntry(key, parse(quickEntrySchema, payload), runId)
+  }
+
+  /**
+   * Identifies one run of the shortcut, so a retry after a lost response
+   * returns the expense already recorded instead of making a second one. Two
+   * deliberate purchases of the same amount carry different ids and stay two.
+   */
+  const runIdFrom = (request: FastifyRequest) => {
+    const header = request.headers['idempotency-key']
+    const value = typeof header === 'string' ? header : (request.query as { run?: string })?.run
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(value) ? value : undefined
   }
   const bearerFrom = (header?: string) => header?.startsWith('Bearer ') ? header.slice(7).trim() : ''
 
   app.post('/api/v1/quick', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) =>
-    reply.code(201).send(await recordQuick(bearerFrom(request.headers.authorization), request.body)))
+    reply.code(201).header('cache-control', 'no-store')
+      .send(await recordQuick(bearerFrom(request.headers.authorization), request.body, runIdFrom(request))))
 
   app.get('/api/v1/quick', { logLevel: 'silent', config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     const query = request.query as { q?: string; amount?: string; text?: string }
@@ -458,12 +470,12 @@ export async function buildApp(store: FinanceStore) {
     const split = parsed?.status === 'ok' ? parsed : null
     const result = await recordQuick(bearerFrom(request.headers.authorization), {
       amount: split?.amount ?? query.amount ?? '', text: split?.text ?? query.text ?? '',
-    })
+    }, runIdFrom(request))
     // Shortcuts shows this string in its notification, so it has to read as a
     // confirmation to a person, not as JSON.
     const kopecks = parseQuickAmount(split?.amount ?? query.amount ?? '') ?? 0
     const sum = (kopecks / 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })
-    return reply.type('text/plain; charset=utf-8').send(
+    return reply.type('text/plain; charset=utf-8').header('cache-control', 'no-store').send(
       `✅ Записано ${sum} ₽\n${result.categoryName ?? 'Без категории'}`)
   })
 

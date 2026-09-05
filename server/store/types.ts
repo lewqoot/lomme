@@ -121,8 +121,12 @@ export interface FinanceStore {
   issueQuickKey(userId: string): Promise<{ key: string }>
   /** Whether the user currently has a shortcut key. */
   hasQuickKey(userId: string): Promise<boolean>
-  /** Records one line from the shortcut, working the category out from its text. */
-  createQuickEntry(key: string, input: QuickEntryInput): Promise<QuickEntryResult>
+  /**
+   * Records one line from the shortcut, working the category out from its text.
+   * `runId` identifies one run of the shortcut: repeating it returns the same
+   * expense instead of writing another.
+   */
+  createQuickEntry(key: string, input: QuickEntryInput, runId?: string): Promise<QuickEntryResult>
   /**
    * The same, for a line typed straight into the bot chat. The update id is
    * recorded alongside the expense in one transaction, so a redelivery can be

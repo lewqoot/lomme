@@ -69,6 +69,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private reminders = new Map<string, { enabled: boolean; localTime: string; daysOfWeek: number[] }>()
   private reminderDeliveries = new Set<string>()
   private categoryHints = new Map<string, Map<string, string>>()
+  private quickRuns = new Map<string, QuickEntryResult>()
   private lastDelivery = new Map<string, Date>()
   private userCreatedAt = new Map<string, Date>()
   private workspaces = new Map<string, InternalWorkspace>()
@@ -239,10 +240,17 @@ export class MemoryFinanceStore implements FinanceStore {
     return this.quickKeys.has(userId)
   }
 
-  async createQuickEntry(key: string, input: QuickEntryInput) {
+  async createQuickEntry(key: string, input: QuickEntryInput, runId?: string) {
     const userId = [...this.quickKeys.entries()].find(([, hash]) => quickKeyMatches(key, hash))?.[0]
     if (!userId) throw new AppError(401, 'QUICK_KEY_INVALID', 'Ключ не подходит')
-    return this.recordQuickEntry(userId, input, 'shortcut')
+    const runKey = runId ? `${userId}:quick:${runId}` : null
+    if (runKey) {
+      const seen = this.quickRuns.get(runKey)
+      if (seen) return seen
+    }
+    const result = await this.recordQuickEntry(userId, input, 'shortcut')
+    if (runKey) this.quickRuns.set(runKey, result)
+    return result
   }
 
   async createBotEntry(telegramUserId: number, input: QuickEntryInput, updateId: number | null) {

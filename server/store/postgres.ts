@@ -26,6 +26,7 @@ import type { DeliveryKind, ReminderCandidate } from '../telegram/reminders.js'
 import { hashToken, randomToken } from '../lib/security.js'
 import type {
   AccountInput,
+  QuickEntryResult,
   StoreReadiness,
   TelegramUpdateClaim,
   ReminderSettingsInput,
@@ -53,6 +54,9 @@ import { expenseCategories, incomeCategories } from './default-categories.js'
  * people who asked for the bot, not a broadcast.
  */
 const REMINDER_DEFAULTS = { enabled: true, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
+
+/** Namespaced so a shortcut run can never collide with a manual idempotency key. */
+const quickRunKey = (userId: string, runId: string) => `${userId}:quick:${runId}`
 
 let cachedMigrationCount: number | undefined
 
@@ -280,12 +284,31 @@ export class PostgresFinanceStore implements FinanceStore {
     return Boolean(result.rows[0]?.quick_key_hash)
   }
 
-  async createQuickEntry(key: string, input: QuickEntryInput) {
+  async createQuickEntry(key: string, input: QuickEntryInput, runId?: string) {
     // Looked up by hash, so the key itself never has to be compared in SQL.
     const owner = await this.pool.query('SELECT id, active_account_id FROM users WHERE quick_key_hash=$1 AND deleted_at IS NULL', [hashQuickKey(key)])
     const user = owner.rows[0]
     if (!user) throw new AppError(401, 'QUICK_KEY_INVALID', 'Ключ не подходит')
-    return this.recordQuickEntry(user.id as string, user.active_account_id as string | null, input, 'shortcut')
+    const userId = user.id as string
+
+    // One run of the shortcut, replayed. Without this a lost response turns
+    // into a second identical expense the moment the person tries again.
+    if (runId) {
+      const seen = await this.pool.query(
+        `SELECT response FROM idempotency_keys WHERE key=$1 AND user_id=$2`, [quickRunKey(userId, runId), userId])
+      if (seen.rowCount) return seen.rows[0].response as QuickEntryResult
+    }
+
+    const result = await this.recordQuickEntry(userId, user.active_account_id as string | null, input, 'shortcut')
+    if (runId) {
+      // A losing race means the same run was recorded concurrently; the stored
+      // answer wins so both callers see one expense.
+      await this.pool.query(
+        `INSERT INTO idempotency_keys (key,user_id,operation,response) VALUES ($1,$2,'quick_entry',$3)
+         ON CONFLICT (key) DO NOTHING`,
+        [quickRunKey(userId, runId), userId, JSON.stringify(result)])
+    }
+    return result
   }
 
   async createBotEntry(telegramUserId: number, input: QuickEntryInput, updateId: number | null) {
