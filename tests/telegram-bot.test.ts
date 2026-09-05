@@ -113,7 +113,7 @@ describe('bot router', () => {
 
     expect(seen).toEqual([[777, '3200', 'продукты']])
     if (action.kind !== 'send') throw new Error('ожидали отправку')
-    expect(action.message.text).toMatch(/^✅ Записано 3\s200 ₽\nПродукты$/u)
+    expect(action.message.text).toMatch(/^✔️ Записано 3\s200 ₽\nПродукты$/u)
   })
 
   it('честно помечает угаданную категорию', async () => {

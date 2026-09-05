@@ -5,12 +5,13 @@
  * limit or a network failure is recognised once rather than at every call site.
  */
 
-import { leadingEmojiEntities } from './custom-emoji.js'
+import { customEmojiButton, customEmojiEntities } from './custom-emoji.js'
 
-export type InlineButton =
-  | { text: string; url: string }
-  | { text: string; web_app: { url: string } }
-  | { text: string; callback_data: string }
+export type InlineButton = { text: string; icon_custom_emoji_id?: string } & (
+  | { url: string }
+  | { web_app: { url: string } }
+  | { callback_data: string }
+)
 
 export type InlineKeyboard = InlineButton[][]
 
@@ -32,6 +33,15 @@ type ApiResponse<T> = {
 }
 
 const API_ORIGIN = 'https://api.telegram.org'
+
+function customEmojiKeyboard(keyboard: InlineKeyboard): InlineKeyboard {
+  return keyboard.map((row) => row.map((button) => {
+    const decorated = customEmojiButton(button.text)
+    return decorated.customEmojiId
+      ? { ...button, text: decorated.text, icon_custom_emoji_id: decorated.customEmojiId }
+      : button
+  }))
+}
 
 export function botToken() {
   return process.env.TELEGRAM_BOT_TOKEN?.trim() || ''
@@ -60,7 +70,7 @@ async function call<T>(method: string, payload: unknown): Promise<ApiResponse<T>
 }
 
 export async function sendMessage(chatId: number, message: BotMessage): Promise<SendOutcome> {
-  const entities = leadingEmojiEntities(message.text)
+  const entities = customEmojiEntities(message.text)
   const result = await call<{ message_id: number }>('sendMessage', {
     chat_id: chatId,
     text: message.text,
@@ -69,7 +79,7 @@ export async function sendMessage(chatId: number, message: BotMessage): Promise<
     // a character Telegram would otherwise read as markup. Animated emoji are
     // attached as entities for the same reason — HTML would reintroduce it.
     ...(entities.length ? { entities } : {}),
-    ...(message.keyboard ? { reply_markup: { inline_keyboard: message.keyboard } } : {}),
+    ...(message.keyboard ? { reply_markup: { inline_keyboard: customEmojiKeyboard(message.keyboard) } } : {}),
   })
   if (result.ok && result.result) return { ok: true, messageId: result.result.message_id }
   const description = result.description || `HTTP ${result.status}`
@@ -85,13 +95,13 @@ export async function sendMessage(chatId: number, message: BotMessage): Promise<
  * back to sending a new message so the answer still arrives.
  */
 export async function editMessage(chatId: number, messageId: number, message: BotMessage): Promise<SendOutcome> {
-  const entities = leadingEmojiEntities(message.text)
+  const entities = customEmojiEntities(message.text)
   const result = await call<{ message_id: number }>('editMessageText', {
     chat_id: chatId,
     message_id: messageId,
     text: message.text,
     ...(entities.length ? { entities } : {}),
-    ...(message.keyboard ? { reply_markup: { inline_keyboard: message.keyboard } } : {}),
+    ...(message.keyboard ? { reply_markup: { inline_keyboard: customEmojiKeyboard(message.keyboard) } } : {}),
   })
   if (result.ok && result.result) return { ok: true, messageId: result.result.message_id }
   const description = result.description || `HTTP ${result.status}`
