@@ -84,6 +84,11 @@ export const updateTransactionSchema = transactionBaseSchema
   .extend({ version: z.number().int().positive() })
   .superRefine(validateTransaction)
 
+/** Optimistic-lock version used by destructive transaction state changes. */
+export const transactionVersionSchema = z.object({
+  version: z.number().int().positive(),
+})
+
 export const createAccountSchema = z.object({
   workspaceId: uuidSchema,
   name: z.string().trim().min(1).max(80),

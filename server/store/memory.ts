@@ -77,6 +77,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private accounts = new Map<string, AccountView[]>()
   private categories = new Map<string, CategoryView[]>()
   private transactions = new Map<string, TransactionView[]>()
+  private deletedTransactions = new Map<string, { workspaceId: string; transaction: TransactionView }>()
   private invites = new Map<string, InternalInvite>()
   private accountInvites = new Map<string, InternalAccountInvite>()
   private accountAccess = new Map<string, Map<string, 'owner' | 'editor'>>()
@@ -377,7 +378,27 @@ export class MemoryFinanceStore implements FinanceStore {
     this.requireAccountAccess(userId, match.transaction.accountId)
     if (match.transaction.targetAccountId) this.requireAccountAccess(userId, match.transaction.targetAccountId)
     if (match.transaction.version !== version) throw conflict()
+    this.deletedTransactions.set(transactionId, {
+      workspaceId: match.workspaceId,
+      transaction: { ...match.transaction, version: version + 1 },
+    })
     this.transactions.set(match.workspaceId, match.list.filter((item) => item.id !== transactionId))
+  }
+
+  async restoreTransaction(userId: string, transactionId: string, version: number) {
+    const deleted = this.deletedTransactions.get(transactionId)
+    if (!deleted) {
+      for (const list of this.transactions.values()) {
+        if (list.some((item) => item.id === transactionId)) throw conflict('Операция уже восстановлена или изменена')
+      }
+      throw notFound('Операция не найдена')
+    }
+    this.requireAccountAccess(userId, deleted.transaction.accountId)
+    if (deleted.transaction.targetAccountId) this.requireAccountAccess(userId, deleted.transaction.targetAccountId)
+    if (deleted.transaction.version !== version) throw conflict('Операция уже изменена — обновите экран')
+    const restored = { ...deleted.transaction, version: version + 1 }
+    this.transactions.set(deleted.workspaceId, [...(this.transactions.get(deleted.workspaceId) || []), restored])
+    this.deletedTransactions.delete(transactionId)
   }
 
   async createAccount(userId: string, input: AccountInput) {

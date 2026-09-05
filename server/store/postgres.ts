@@ -499,6 +499,27 @@ export class PostgresFinanceStore implements FinanceStore {
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
   }
 
+  async restoreTransaction(userId: string, transactionId: string, version: number) {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const found = await client.query(
+        `SELECT workspace_id,version,account_id,target_account_id,deleted_at FROM transactions WHERE id=$1 FOR UPDATE`,
+        [transactionId],
+      )
+      if (!found.rowCount) throw notFound('Операция не найдена')
+      await this.assertAccountAccess(client, userId, found.rows[0].account_id)
+      if (found.rows[0].target_account_id) await this.assertAccountAccess(client, userId, found.rows[0].target_account_id)
+      if (!found.rows[0].deleted_at || found.rows[0].version !== version) throw conflict('Операция уже восстановлена или изменена')
+      await client.query(
+        `UPDATE transactions SET deleted_at=NULL,updated_by_user_id=$2,updated_at=now(),version=version+1 WHERE id=$1`,
+        [transactionId, userId],
+      )
+      await this.audit(client, found.rows[0].workspace_id, userId, 'transaction', transactionId, 'restore', { version: version + 1 })
+      await client.query('COMMIT')
+    } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
+  }
+
   async createAccount(userId: string, input: AccountInput) {
     const client = await this.pool.connect(); const id = randomUUID()
     try {

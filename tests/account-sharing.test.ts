@@ -74,7 +74,18 @@ describe('wallet selection and sharing', () => {
     expect(operation.statusCode).toBe(201)
     const ownerScoped = (await app.inject({ method: 'GET', url: `/api/v1/snapshot?workspaceId=${ownerBefore.activeWorkspaceId}&accountId=${sharedAccountId}`, headers: { cookie: owner.cookie } })).json()
     expect(ownerScoped.accounts.find((item: { id: string }) => item.id === sharedAccountId)).toMatchObject({ accessRole: 'owner', memberCount: 2 })
-    expect(ownerScoped.transactions.find((item: { id: string }) => item.id === operation.json().id)).toMatchObject({ authorName: 'Ирина', note: 'Общая покупка' })
+    const sharedOperation = ownerScoped.transactions.find((item: { id: string }) => item.id === operation.json().id)
+    expect(sharedOperation).toMatchObject({ authorName: 'Ирина', note: 'Общая покупка' })
+
+    // One family member may delete while another still has the old row open.
+    // Undo is versioned on the server, so only one restore wins and a stale
+    // second tap cannot duplicate or silently overwrite the shared operation.
+    expect((await app.inject({ method: 'DELETE', url: `/api/v1/transactions/${sharedOperation.id}?version=${sharedOperation.version}`, headers: { cookie: guest.cookie } })).statusCode).toBe(204)
+    expect((await app.inject({ method: 'POST', url: `/api/v1/transactions/${sharedOperation.id}/restore`, headers: { cookie: owner.cookie }, payload: { version: sharedOperation.version + 1 } })).statusCode).toBe(204)
+    expect((await app.inject({ method: 'POST', url: `/api/v1/transactions/${sharedOperation.id}/restore`, headers: { cookie: guest.cookie }, payload: { version: sharedOperation.version + 1 } })).statusCode).toBe(409)
+    const restoredShared = (await app.inject({ method: 'GET', url: `/api/v1/snapshot?workspaceId=${ownerBefore.activeWorkspaceId}&accountId=${sharedAccountId}`, headers: { cookie: owner.cookie } })).json()
+    expect(restoredShared.transactions.filter((item: { id: string }) => item.id === sharedOperation.id)).toHaveLength(1)
+    expect(restoredShared.transactions.find((item: { id: string }) => item.id === sharedOperation.id).version).toBe(sharedOperation.version + 2)
 
     expect((await app.inject({ method: 'DELETE', url: `/api/v1/accounts/${sharedAccountId}/members/${owner.user.id}`, headers: { cookie: guest.cookie } })).statusCode).toBe(403)
     expect((await app.inject({ method: 'DELETE', url: `/api/v1/accounts/${sharedAccountId}/members/${guest.user.id}`, headers: { cookie: owner.cookie } })).statusCode).toBe(204)

@@ -22,6 +22,7 @@ import {
   reminderSettingsSchema,
   reorderCategoriesSchema,
   transactionPageQuerySchema,
+  transactionVersionSchema,
   updateAccountSchema,
   updateCategorySchema,
   updateTransactionSchema,
@@ -312,6 +313,12 @@ export async function buildApp(store: FinanceStore) {
     const { id } = parseId(request.params); const query = request.query as { version?: string }
     const version = Number(query.version); if (!Number.isInteger(version) || version < 1) throw new AppError(400, 'VALIDATION_ERROR', 'Передайте актуальную версию')
     await store.deleteTransaction(request.currentUser!.id, id, version); return reply.code(204).send()
+  })
+  app.post('/api/v1/transactions/:id/restore', { preHandler: requireUser }, async (request, reply) => {
+    const { id } = parseId(request.params)
+    const { version } = parse(transactionVersionSchema, request.body)
+    await store.restoreTransaction(request.currentUser!.id, id, version)
+    return reply.code(204).send()
   })
 
   app.post('/api/v1/accounts', { preHandler: requireUser }, async (request, reply) => reply.code(201).send(await store.createAccount(request.currentUser!.id, parse(createAccountSchema, request.body))))

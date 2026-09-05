@@ -75,8 +75,7 @@ export default function App() {
   const [inviteHandled, setInviteHandled] = useState(false)
   const [period, setPeriod] = useState<PeriodSelection>(() => defaultPeriod())
   const [toast, setToast] = useState<{ text: string; action?: string; onAction?: () => void } | null>(null)
-  const deleteTimers = useRef(new Map<string, number>())
-  const [pendingDeleteCount, setPendingDeleteCount] = useState(0)
+  const deleteRequests = useRef(new Set<string>())
   const [expandedJournalKey, setExpandedJournalKey] = useState<string | null>(null)
   const settingsBackRef = useRef<(() => void) | null>(null)
   const [capturedInviteToken] = useState<string | null>(() => telegramInviteToken())
@@ -113,7 +112,7 @@ export default function App() {
     // another device. Keep visible clients close to real time without polling in
     // the background. Returning from the native Shortcuts app is handled below
     // and refreshes immediately.
-    refetchInterval: pendingDeleteCount || journalExpanded ? false : SNAPSHOT_POLL_INTERVAL_MS,
+    refetchInterval: journalExpanded ? false : SNAPSHOT_POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
     refetchOnReconnect: 'always',
     refetchOnWindowFocus: 'always',
@@ -161,11 +160,6 @@ export default function App() {
     void queryClient.invalidateQueries({ queryKey: ['snapshot'] })
   }, [queryClient])
   useEffect(() => subscribeToForeground(refresh), [refresh])
-  useEffect(() => () => {
-    for (const timer of deleteTimers.current.values()) window.clearTimeout(timer)
-    deleteTimers.current.clear()
-  }, [])
-
   useEffect(() => {
     if (navigation.pending === 'idle') return
     const pending = navigation.pending; const revision = navigation.revision
@@ -198,60 +192,43 @@ export default function App() {
     loadMore.mutate({ cursor: data.transactionsNextCursor, activeWorkspaceId: data.activeWorkspaceId, activeAccountId: data.activeAccountId, queryKey: snapshotKey })
   }
 
-  const scheduleDelete = (transaction: TransactionView) => {
-    if (deleteTimers.current.has(transaction.id)) return
+  const scheduleDelete = async (transaction: TransactionView) => {
+    if (deleteRequests.current.has(transaction.id)) return
+    deleteRequests.current.add(transaction.id)
     dispatchNavigation({ type: 'dismiss-editor' })
-    void queryClient.cancelQueries({ queryKey: ['snapshot'] })
-    queryClient.setQueryData<AppSnapshot>(snapshotKey, (current) => {
-      if (!current) return current
-      const transactions = current.transactions.filter((item) => item.id !== transaction.id)
-      return {
-        ...current,
-        transactions,
-        accounts: current.accounts.map((account) => {
-          if (account.id === transaction.accountId) return { ...account, balanceKopecks: account.balanceKopecks + (transaction.type === 'income' ? -transaction.amountKopecks : transaction.amountKopecks) }
-          if (account.id === transaction.targetAccountId) return { ...account, balanceKopecks: account.balanceKopecks - transaction.amountKopecks }
-          return account
-        }),
+    setToast({ text: 'Удаляем операцию…' })
+    try {
+      // Start the write immediately and let the browser finish it while the
+      // Telegram WebView is closing. Undo is a second durable write, not a
+      // timer whose intent disappears with the page.
+      await api(`/transactions/${transaction.id}?version=${transaction.version}`, { method: 'DELETE', keepalive: true })
+      await queryClient.invalidateQueries({ queryKey: ['snapshot'] })
+      let restoring = false
+      const undo = async () => {
+        if (restoring) return
+        restoring = true
+        setToast({ text: 'Восстанавливаем операцию…' })
+        try {
+          await api(`/transactions/${transaction.id}/restore`, {
+            method: 'POST',
+            body: JSON.stringify({ version: transaction.version + 1 }),
+            keepalive: true,
+          })
+          await queryClient.invalidateQueries({ queryKey: ['snapshot'] })
+          haptic('success')
+          setToast({ text: 'Операция восстановлена' })
+        } catch (error) {
+          await queryClient.invalidateQueries({ queryKey: ['snapshot'] })
+          setToast({ text: error instanceof ApiError && error.status === 409 ? 'Операция уже изменена — обновили экран' : 'Не удалось восстановить операцию' })
+        }
       }
-    })
-    const restore = () => queryClient.setQueryData<AppSnapshot>(snapshotKey, (current) => {
-      if (!current || current.transactions.some((item) => item.id === transaction.id)) return current
-      const transactions = [...current.transactions, transaction].sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
-      return {
-        ...current,
-        transactions,
-        accounts: current.accounts.map((account) => {
-          if (account.id === transaction.accountId) return { ...account, balanceKopecks: account.balanceKopecks + (transaction.type === 'income' ? transaction.amountKopecks : -transaction.amountKopecks) }
-          if (account.id === transaction.targetAccountId) return { ...account, balanceKopecks: account.balanceKopecks + transaction.amountKopecks }
-          return account
-        }),
-      }
-    })
-    const undo = () => {
-      const timer = deleteTimers.current.get(transaction.id)
-      if (timer === undefined) return
-      window.clearTimeout(timer)
-      deleteTimers.current.delete(transaction.id)
-      setPendingDeleteCount(deleteTimers.current.size)
-      setToast(null)
-      restore()
+      setToast({ text: 'Операция удалена', action: 'Отменить', onAction: () => { void undo() } })
+    } catch (error) {
+      await queryClient.invalidateQueries({ queryKey: ['snapshot'] })
+      setToast({ text: error instanceof ApiError && error.status === 409 ? 'Операция уже изменена — обновили экран' : 'Не удалось удалить операцию' })
+    } finally {
+      deleteRequests.current.delete(transaction.id)
     }
-    setToast({ text: 'Операция удалена', action: 'Отменить', onAction: undo })
-    const timer = window.setTimeout(async () => {
-      deleteTimers.current.delete(transaction.id)
-      setPendingDeleteCount(deleteTimers.current.size)
-      try {
-        await api(`/transactions/${transaction.id}?version=${transaction.version}`, { method: 'DELETE' })
-        if (!deleteTimers.current.size) refresh()
-      } catch {
-        restore()
-        setToast({ text: 'Не удалось удалить операцию' })
-        if (!deleteTimers.current.size) refresh()
-      }
-    }, 4300)
-    deleteTimers.current.set(transaction.id, timer)
-    setPendingDeleteCount(deleteTimers.current.size)
   }
 
   if (auth.isPending) return <Loading />

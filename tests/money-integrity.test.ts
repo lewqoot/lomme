@@ -90,6 +90,38 @@ describe('целостность денег', () => {
     await app.close()
   })
 
+  it('удаляет сразу, а отмену подтверждает отдельным восстановлением', async () => {
+    const { app, cookie, snapshot, add, data } = await session()
+    const account = data.accounts[0]
+    const category = data.categories.find((item: { type: string }) => item.type === 'expense')
+    const before = balances(await snapshot())
+    const { id } = (await add({
+      type: 'expense', amountKopecks: 321_00, accountId: account.id, categoryId: category.id,
+      occurredAt: new Date().toISOString(),
+    })).json()
+    const created = (await snapshot()).transactions.find((item: { id: string }) => item.id === id)
+
+    const removed = await app.inject({ method: 'DELETE', url: `/api/v1/transactions/${id}?version=${created.version}`, headers: { cookie } })
+    expect(removed.statusCode).toBe(204)
+    expect((await snapshot()).transactions.some((item: { id: string }) => item.id === id)).toBe(false)
+    expect(balances(await snapshot())).toBe(before)
+
+    const restored = await app.inject({
+      method: 'POST', url: `/api/v1/transactions/${id}/restore`, headers: { cookie }, payload: { version: created.version + 1 },
+    })
+    expect(restored.statusCode).toBe(204)
+    const afterUndo = await snapshot()
+    expect(afterUndo.transactions.find((item: { id: string }) => item.id === id)).toMatchObject({ version: created.version + 2 })
+    expect(before - balances(afterUndo)).toBe(321_00)
+
+    const staleUndo = await app.inject({
+      method: 'POST', url: `/api/v1/transactions/${id}/restore`, headers: { cookie }, payload: { version: created.version + 1 },
+    })
+    expect(staleUndo.statusCode).toBe(409)
+    expect((await snapshot()).transactions.filter((item: { id: string }) => item.id === id)).toHaveLength(1)
+    await app.close()
+  })
+
   it('сумма по категориям сходится с итогом периода', async () => {
     const { app, snapshot, add, data } = await session()
     const account = data.accounts[0]

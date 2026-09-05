@@ -144,6 +144,7 @@ export interface FinanceStore {
   deleteBotEntry(telegramUserId: number, transactionId: string): Promise<{ amountKopecks: number } | null>
   updateTransaction(userId: string, transactionId: string, input: TransactionUpdate): Promise<void>
   deleteTransaction(userId: string, transactionId: string, version: number): Promise<void>
+  restoreTransaction(userId: string, transactionId: string, version: number): Promise<void>
   createAccount(userId: string, input: AccountInput): Promise<{ id: string }>
   updateAccount(userId: string, accountId: string, input: AccountUpdate): Promise<void>
   archiveAccount(userId: string, accountId: string, version: number): Promise<void>
