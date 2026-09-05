@@ -150,7 +150,7 @@ export function couldNotRecord(): BotMessage {
  */
 export function dailyReminder(deliveredBefore: number): BotMessage {
   const lines = [
-    'Зашёл напомнить про траты 👋',
+    '🔔 Зашёл напомнить про траты',
     '',
     'Напиши пару слов — 300 метро — и я запишу.',
   ]
@@ -219,7 +219,7 @@ export function monthlyDigest(input: {
 export function accountInvite(accountName: string, inviteUrl: string): BotMessage {
   return {
     text: [
-      `🤝 Тебя зовут в общий кошелёк «${accountName}»`,
+      `✉️ Тебя зовут в общий кошелёк «${accountName}»`,
       '',
       'Записи будут видны всем участникам.',
     ].join('\n'),
@@ -229,7 +229,7 @@ export function accountInvite(accountName: string, inviteUrl: string): BotMessag
 
 /** Told to the person who sent the invite, once it is actually used. */
 export function accountInviteAccepted(memberName: string, accountName: string): BotMessage {
-  return { text: `🤝 ${memberName} присоединился к кошельку «${accountName}»` }
+  return { text: `🎉 ${memberName} присоединился к кошельку «${accountName}»` }
 }
 
 /**
@@ -243,7 +243,7 @@ export function sharedWalletDigest(accountName: string, byAuthor: Array<{ name: 
   }
   return {
     text: [
-      `👨‍👩‍👧 Сегодня в «${accountName}»`,
+      `🏠 Сегодня в «${accountName}»`,
       '',
       ...byAuthor.map((item) => `${item.name} — ${entries(item.count)} на ${money(item.amountKopecks)}`),
     ].join('\n'),

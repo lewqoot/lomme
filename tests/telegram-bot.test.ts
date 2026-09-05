@@ -307,7 +307,7 @@ describe('bot webhook', () => {
     })
 
     expect(response.statusCode).toBe(200)
-    expect(sent).toEqual([{ chatId: 111, text: '🤝 Ирина присоединился к кошельку «Кошелёк»' }])
+    expect(sent).toEqual([{ chatId: 111, text: '🎉 Ирина присоединился к кошельку «Кошелёк»' }])
   })
 
   it('молчит, если пригласивший не разрешал боту писать', async () => {
