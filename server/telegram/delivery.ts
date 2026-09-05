@@ -12,19 +12,21 @@
 
 import type { FinanceStore } from '../store/types.js'
 import { sendMessage, type BotMessage } from './api.js'
+import type { LinkContext } from './texts.js'
 import {
   eveningSlot,
   lastMonthRange,
   lastWeekRange,
   previousWeekRange,
   monthlyDigestDueAt,
+  reactivationDue,
   reminderDueAt,
   startOfLocalDay,
   weeklyDigestDueAt,
   type DeliveryKind,
   type ReminderCandidate,
 } from './reminders.js'
-import { dailyReminder, monthlyDigest, sharedWalletDigest, weeklyDigest } from './texts.js'
+import { dailyReminder, monthlyDigest, reactivation, sharedWalletDigest, weeklyDigest } from './texts.js'
 
 const PACING_MS = 40
 
@@ -40,12 +42,12 @@ export type DeliveryReport = { sent: number; skipped: number; failed: number; re
 
 type Planned = { kind: DeliveryKind; scheduledFor: Date; message: BotMessage }
 
-export async function runDeliveries(store: FinanceStore, now = new Date()): Promise<DeliveryReport> {
+export async function runDeliveries(store: FinanceStore, now = new Date(), links: LinkContext = { appUrl: null, botUsername: null }): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, skipped: 0, failed: 0, revoked: 0 }
   const candidates = await store.reminderCandidates()
 
   for (const candidate of candidates) {
-    const planned = await planFor(store, candidate, now)
+    const planned = await planFor(store, candidate, now, links)
     if (!planned) { report.skipped += 1; continue }
 
     // Claiming before sending is what keeps two overlapping worker ticks from
@@ -81,7 +83,7 @@ export async function runDeliveries(store: FinanceStore, now = new Date()): Prom
 }
 
 /** The one message this person is owed right now, highest priority first. */
-async function planFor(store: FinanceStore, candidate: ReminderCandidate, now: Date): Promise<Planned | null> {
+async function planFor(store: FinanceStore, candidate: ReminderCandidate, now: Date, links: LinkContext): Promise<Planned | null> {
   const monthly = monthlyDigestDueAt(candidate.timezone, now)
   if (monthly) {
     const message = await monthlyMessage(store, candidate, now)
@@ -102,6 +104,13 @@ async function planFor(store: FinanceStore, candidate: ReminderCandidate, now: D
     if (activity) {
       return { kind: 'shared', scheduledFor: evening, message: sharedWalletDigest(activity.accountName, activity.byAuthor) }
     }
+  }
+
+  // A one-off outranks the nightly nudge: it says something the reminder
+  // cannot, and it only ever gets one chance to say it.
+  if (evening) {
+    const kind = reactivationDue(candidate, now)
+    if (kind) return { kind, scheduledFor: evening, message: reactivation(kind, links) }
   }
 
   const daily = reminderDueAt(candidate, now)

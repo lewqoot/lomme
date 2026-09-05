@@ -22,10 +22,29 @@ export type ReminderCandidate = {
   deliveredCount: number
   /** The last message of any kind the bot sent them, for the one-a-day rule. */
   lastDeliveryAt: Date | null
+  /** When this person's account was created, for the onboarding series. */
+  createdAt: Date
+  /** How much they have recorded in total, ever. */
+  entryCount: number
+  /** Whether the iOS shortcut key has been issued. */
+  hasQuickKey: boolean
+  /** Whether any of their wallets has somebody else in it. */
+  hasSharedWallet: boolean
+  /** Which one-off messages already went out, so none is ever repeated. */
+  sentKinds: ReadonlySet<string>
 }
 
 /** Every schedule the worker can send on, in the order it resolves conflicts. */
-export type DeliveryKind = 'monthly' | 'weekly' | 'shared' | 'daily'
+export type DeliveryKind = 'monthly' | 'weekly' | 'shared' | 'daily' | ReactivationKind
+
+/**
+ * Messages sent once in a person's life, each for a reason that stops being
+ * true the moment it is acted on. They are recorded under their own kind, and
+ * a kind that has been sent is never sent again.
+ */
+export type ReactivationKind = 'start-day1' | 'start-day3' | 'return' | 'tip-shortcut' | 'tip-family'
+
+const DAY_MS = 86_400_000
 
 /** Sunday evening, once the week is effectively over but before people turn in. */
 const WEEKLY_HOUR = 19
@@ -106,6 +125,48 @@ function withinWindow(scheduledFor: Date, now: Date) {
 
 function sameLocalDay(instant: Date | null, now: Date, timeZone: string) {
   return Boolean(instant) && zonedDateKey(instant!, timeZone) === zonedDateKey(now, timeZone)
+}
+
+/**
+ * The one-off message this person is owed, if any. Checked in order, and the
+ * first that applies wins; the rest keep waiting for their own conditions.
+ *
+ * Every branch is bounded by something that becomes false once acted upon —
+ * a first entry, an installed shortcut, a second person in the wallet — so the
+ * series ends on its own rather than by counting attempts.
+ */
+export function reactivationDue(candidate: ReminderCandidate, now: Date): ReactivationKind | null {
+  const age = now.getTime() - candidate.createdAt.getTime()
+  const silence = candidate.lastEntryAt ? now.getTime() - candidate.lastEntryAt.getTime() : null
+
+  if (candidate.entryCount === 0) {
+    // Two nudges, then silence. Somebody who has recorded nothing in three
+    // days has answered the question.
+    if (age >= 3 * DAY_MS) return unsent(candidate, 'start-day3')
+    if (age >= DAY_MS) return unsent(candidate, 'start-day1')
+    return null
+  }
+
+  // They used it and stopped. Worth one message, once.
+  if (silence !== null && silence >= 7 * DAY_MS) return unsent(candidate, 'return')
+
+  // Advice only makes sense to someone who has the habit already.
+  if (!candidate.hasQuickKey && candidate.entryCount >= 5 && age >= 7 * DAY_MS) return unsent(candidate, 'tip-shortcut')
+  if (!candidate.hasSharedWallet && candidate.entryCount >= 15 && age >= 14 * DAY_MS) {
+    // Never straight after the shortcut tip: two pieces of advice in a row
+    // read as a campaign rather than a suggestion.
+    if (candidate.sentKinds.has('tip-shortcut') && !olderThanAWeek(candidate.lastDeliveryAt, now)) return null
+    return unsent(candidate, 'tip-family')
+  }
+  return null
+}
+
+function unsent(candidate: ReminderCandidate, kind: ReactivationKind) {
+  return candidate.sentKinds.has(kind) ? null : kind
+}
+
+function olderThanAWeek(instant: Date | null, now: Date) {
+  return instant === null || now.getTime() - instant.getTime() >= 7 * DAY_MS
 }
 
 /** Sunday's wrap-up. Nothing about what was recorded suppresses it: unlike the

@@ -67,6 +67,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private reminderDeliveries = new Set<string>()
   private categoryHints = new Map<string, Map<string, string>>()
   private lastDelivery = new Map<string, Date>()
+  private userCreatedAt = new Map<string, Date>()
   private workspaces = new Map<string, InternalWorkspace>()
   private members = new Map<string, MemberView[]>()
   private accounts = new Map<string, AccountView[]>()
@@ -85,6 +86,7 @@ export class MemoryFinanceStore implements FinanceStore {
       const user: InternalUser = { id: userId, telegramUserId: identity.id, firstName: identity.firstName, username: identity.username, timezone, botWriteAccess: identity.allowsWriteToPm === true, activeWorkspaceId: null, activeAccountId: null }
       this.users.set(userId, user)
       this.usersByTelegram.set(identity.id, userId)
+      this.userCreatedAt.set(userId, new Date())
       this.createPersonalSpace(user)
     } else {
       const user = this.users.get(userId)!
@@ -591,6 +593,13 @@ export class MemoryFinanceStore implements FinanceStore {
         lastEntryAt: own.length ? new Date(Math.max(...own)) : null,
         deliveredCount: [...this.reminderDeliveries].filter((key) => key.startsWith(`${userId}:daily:`)).length,
         lastDeliveryAt: this.lastDelivery.get(userId) ?? null,
+        createdAt: this.userCreatedAt.get(userId) ?? new Date(0),
+        entryCount: own.length,
+        hasQuickKey: this.quickKeys.has(userId),
+        hasSharedWallet: [...this.accountAccess.values()].some((access) => access.size > 1 && access.has(userId)),
+        sentKinds: new Set([...this.reminderDeliveries]
+          .filter((key) => key.startsWith(`${userId}:`))
+          .map((key) => key.split(':')[1]!)),
       })
     }
     return candidates

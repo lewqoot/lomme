@@ -98,6 +98,12 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
   await call('answerCallbackQuery', { callback_query_id: callbackQueryId, ...(text ? { text } : {}) })
 }
 
+/** The bot's own username, for deep links built outside a request. */
+export function botUsernameFromEnv() {
+  const value = process.env.TELEGRAM_BOT_USERNAME?.trim().replace(/^@/, '')
+  return value && /^[A-Za-z0-9_]{5,32}$/.test(value) ? value : null
+}
+
 export async function setMyCommands(commands: Array<{ command: string; description: string }>) {
   const result = await call('setMyCommands', { commands, scope: { type: 'all_private_chats' }, language_code: 'ru' })
   return Boolean(result.ok)

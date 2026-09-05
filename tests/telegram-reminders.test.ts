@@ -4,7 +4,7 @@ import { MemoryFinanceStore } from '../server/store/memory.js'
 import { runDeliveries } from '../server/telegram/delivery.js'
 import {
   lastMonthRange, lastWeekRange, monthlyDigestDueAt, previousWeekRange,
-  reminderDueAt, weeklyDigestDueAt, zonedIsoWeekday, type ReminderCandidate,
+  reactivationDue, reminderDueAt, weeklyDigestDueAt, zonedIsoWeekday, type ReminderCandidate,
 } from '../server/telegram/reminders.js'
 
 /** Monday 7 September 2026, 20:05 in Moscow — five minutes past the default. */
@@ -19,6 +19,11 @@ const candidate = (overrides: Partial<ReminderCandidate> = {}): ReminderCandidat
   lastEntryAt: null,
   deliveredCount: 0,
   lastDeliveryAt: null,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
+  entryCount: 12,
+  hasQuickKey: true,
+  hasSharedWallet: true,
+  sentKinds: new Set<string>(),
   ...overrides,
 })
 
@@ -134,6 +139,66 @@ describe('расписание сводок', () => {
     const range = lastMonthRange(zone, new Date('2026-01-01T09:05:00Z'))
 
     expect(range).toMatchObject({ year: 2025, month: 12 })
+  })
+})
+
+describe('одноразовые сообщения', () => {
+  const DAY = 86_400_000
+  const now = MONDAY_EVENING
+  const aged = (days: number, overrides: Partial<ReminderCandidate> = {}) =>
+    candidate({ createdAt: new Date(now.getTime() - days * DAY), ...overrides })
+
+  it('в первый день молчит, на второй зовёт начать', () => {
+    expect(reactivationDue(aged(0.5, { entryCount: 0, lastEntryAt: null }), now)).toBeNull()
+    expect(reactivationDue(aged(1, { entryCount: 0, lastEntryAt: null }), now)).toBe('start-day1')
+  })
+
+  it('на третий день делает последнюю попытку и больше не возвращается', () => {
+    const silent = aged(3, { entryCount: 0, lastEntryAt: null })
+    expect(reactivationDue(silent, now)).toBe('start-day3')
+
+    const answered = aged(10, { entryCount: 0, lastEntryAt: null, sentKinds: new Set(['start-day1', 'start-day3']) })
+    expect(reactivationDue(answered, now)).toBeNull()
+  })
+
+  it('зовёт вернуться после недели тишины, но только раз', () => {
+    const lapsed = { entryCount: 30, lastEntryAt: new Date(now.getTime() - 8 * DAY) }
+    expect(reactivationDue(aged(60, lapsed), now)).toBe('return')
+    expect(reactivationDue(aged(60, { ...lapsed, sentKinds: new Set(['return']) }), now)).toBeNull()
+  })
+
+  it('советует шорткат только тому, кто уже втянулся', () => {
+    const base = { hasQuickKey: false, lastEntryAt: new Date(now.getTime() - DAY) }
+    expect(reactivationDue(aged(8, { ...base, entryCount: 2 }), now)).toBeNull()
+    expect(reactivationDue(aged(3, { ...base, entryCount: 20 }), now)).toBeNull()
+    expect(reactivationDue(aged(8, { ...base, entryCount: 20 }), now)).toBe('tip-shortcut')
+  })
+
+  it('перестаёт советовать шорткат, когда он поставлен', () => {
+    const installed = aged(30, { hasQuickKey: true, entryCount: 20, lastEntryAt: new Date(now.getTime() - DAY) })
+
+    expect(reactivationDue(installed, now)).toBeNull()
+  })
+
+  it('предлагает общий кошелёк, но не следом за советом про шорткат', () => {
+    const ready = {
+      hasQuickKey: true, hasSharedWallet: false, entryCount: 20,
+      lastEntryAt: new Date(now.getTime() - DAY),
+    }
+    expect(reactivationDue(aged(20, ready), now)).toBe('tip-family')
+
+    // Совет про шорткат ушёл вчера — вторая рекомендация подряд подождёт.
+    const justAdvised = aged(20, { ...ready, sentKinds: new Set(['tip-shortcut']), lastDeliveryAt: new Date(now.getTime() - DAY) })
+    expect(reactivationDue(justAdvised, now)).toBeNull()
+
+    const advisedLongAgo = aged(20, { ...ready, sentKinds: new Set(['tip-shortcut']), lastDeliveryAt: new Date(now.getTime() - 10 * DAY) })
+    expect(reactivationDue(advisedLongAgo, now)).toBe('tip-family')
+  })
+
+  it('ничего не предлагает тому, у кого всё уже есть', () => {
+    const settled = aged(90, { entryCount: 100, lastEntryAt: new Date(now.getTime() - DAY), hasQuickKey: true, hasSharedWallet: true })
+
+    expect(reactivationDue(settled, now)).toBeNull()
   })
 })
 

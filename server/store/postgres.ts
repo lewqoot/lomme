@@ -641,6 +641,14 @@ export class PostgresFinanceStore implements FinanceStore {
   async reminderCandidates(): Promise<ReminderCandidate[]> {
     const result = await this.pool.query(
       `SELECT r.user_id, u.telegram_user_id, r.timezone, r.local_time, r.days_of_week,
+              u.created_at, u.quick_key_hash IS NOT NULL AS has_quick_key,
+              (SELECT count(*) FROM transactions t
+                 WHERE t.created_by_user_id=r.user_id AND t.deleted_at IS NULL)::int AS entry_count,
+              EXISTS (SELECT 1 FROM account_members mine
+                        JOIN account_members others ON others.account_id=mine.account_id AND others.user_id<>mine.user_id
+                       WHERE mine.user_id=r.user_id) AS has_shared_wallet,
+              (SELECT coalesce(array_agg(DISTINCT d.kind), '{}') FROM reminder_deliveries d
+                 WHERE d.user_id=r.user_id AND d.delivered_at IS NOT NULL) AS sent_kinds,
               (SELECT MAX(t.occurred_at) FROM transactions t
                  WHERE t.created_by_user_id=r.user_id AND t.deleted_at IS NULL) AS last_entry_at,
               (SELECT count(*) FROM reminder_deliveries d
@@ -659,6 +667,11 @@ export class PostgresFinanceStore implements FinanceStore {
       lastEntryAt: row.last_entry_at ? new Date(row.last_entry_at as string) : null,
       deliveredCount: Number(row.delivered_count),
       lastDeliveryAt: row.last_delivery_at ? new Date(row.last_delivery_at as string) : null,
+      createdAt: new Date(row.created_at as string),
+      entryCount: Number(row.entry_count),
+      hasQuickKey: Boolean(row.has_quick_key),
+      hasSharedWallet: Boolean(row.has_shared_wallet),
+      sentKinds: new Set(row.sent_kinds as string[]),
     }))
   }
 

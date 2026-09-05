@@ -273,6 +273,63 @@ export function monthlyDigest(input: {
   return { text: lines.join('\n') }
 }
 
+/**
+ * The one-off messages. Each asks for the smallest next step rather than
+ * "зайди в приложение", because the step is what was missing.
+ */
+export function reactivation(kind: 'start-day1' | 'start-day3' | 'return' | 'tip-shortcut' | 'tip-family', links: LinkContext): BotMessage {
+  if (kind === 'start-day1') {
+    return {
+      text: [
+        '👀 Ты завёл Lomme, но записей пока нет',
+        '',
+        'Начать проще всего отсюда: напиши 1250 такси — покажу, как это выглядит.',
+      ].join('\n'),
+    }
+  }
+  if (kind === 'start-day3') {
+    return {
+      text: [
+        'Одна трата в день — и через неделю ты увидишь, куда деньги уходят на самом деле.',
+        '',
+        'Давай прямо сейчас: сумма и пара слов.',
+      ].join('\n'),
+    }
+  }
+  if (kind === 'return') {
+    return {
+      text: [
+        'Давно тебя не было 👋',
+        '',
+        'За неделю ничего не записалось. Если хочешь, начнём с сегодняшнего дня — просто напиши трату.',
+      ].join('\n'),
+    }
+  }
+  if (kind === 'tip-shortcut') {
+    return {
+      text: [
+        '⚡️ Хочешь записывать за две секунды?',
+        '',
+        'Шорткат ставит запись трат прямо на экран блокировки — не надо даже открывать Telegram.',
+      ].join('\n'),
+      keyboard: screenRow(links, 'shortcut', 'Настроить шорткат'),
+    }
+  }
+  return {
+    text: [
+      '🏠 Ведёшь бюджет не один?',
+      '',
+      'Общий кошелёк — это когда траты видят все участники, и сразу понятно, кто что записал. Удобно для семьи или пары.',
+    ].join('\n'),
+    keyboard: screenRow(links, 'family', 'Позвать в общий кошелёк'),
+  }
+}
+
+function screenRow(links: LinkContext, screen: 'shortcut' | 'family', text: string): InlineKeyboard {
+  const row = screenLink(links, screen, text)
+  return row.length ? [row] : []
+}
+
 export function accountInvite(accountName: string, inviteUrl: string): BotMessage {
   return {
     text: [
