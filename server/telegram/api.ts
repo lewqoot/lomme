@@ -96,6 +96,18 @@ export async function setMyCommands(commands: Array<{ command: string; descripti
   return Boolean(result.ok)
 }
 
+/**
+ * Which update types Telegram actually delivers. A webhook registered without
+ * `callback_query` silently drops every inline-button press: the button spins
+ * and nothing arrives, with no error anywhere to explain it.
+ */
+export async function webhookAllowedUpdates(): Promise<string[] | null> {
+  const result = await call<{ allowed_updates?: string[]; url?: string }>('getWebhookInfo', {})
+  if (!result.ok || !result.result?.url) return null
+  // An empty list means Telegram's own default, which excludes callback_query.
+  return result.result.allowed_updates ?? []
+}
+
 export async function setChatMenuButton(appUrl: string, label: string) {
   const result = await call('setChatMenuButton', {
     menu_button: { type: 'web_app', text: label, web_app: { url: appUrl } },

@@ -1,6 +1,6 @@
 import { buildApp } from './app.js'
 import { createStore } from './store/index.js'
-import { botToken, setChatMenuButton, setMyCommands } from './telegram/api.js'
+import { botToken, setChatMenuButton, setMyCommands, webhookAllowedUpdates } from './telegram/api.js'
 import { BOT_COMMANDS, MENU_BUTTON_LABEL } from './telegram/texts.js'
 
 const store = await createStore()
@@ -18,6 +18,17 @@ async function registerBotMenu() {
   try {
     await setMyCommands(BOT_COMMANDS)
     if (appUrl?.startsWith('https://')) await setChatMenuButton(appUrl, MENU_BUTTON_LABEL)
+    // The webhook itself is configured out of band, and its update list is
+    // easy to get wrong in a way nothing else reports: buttons simply stop
+    // working. Say so loudly at boot rather than leaving it to be discovered.
+    const allowed = await webhookAllowedUpdates()
+    if (allowed && !allowed.includes('callback_query')) {
+      app.log.warn({
+        event: 'telegram_webhook_missing_callback_query',
+        allowed,
+        fix: 'setWebhook with allowed_updates ["message","callback_query"]',
+      }, 'Inline buttons will not reach this server')
+    }
   } catch (error) {
     app.log.error({ event: 'telegram_menu_registration_failed', error: error instanceof Error ? error.message : 'unknown' })
   }
