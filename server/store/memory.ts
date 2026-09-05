@@ -20,6 +20,7 @@ import { resolveRange, type SnapshotRange } from '../lib/range.js'
 import { decodeTransactionCursor, encodeTransactionCursor } from '../lib/transaction-cursor.js'
 import { AppError, conflict, forbidden, notFound } from '../lib/errors.js'
 import { hashToken, randomToken } from '../lib/security.js'
+import { transactionRequestHash } from '../lib/idempotency.js'
 import type {
   AccountInput,
   AccountUpdate,
@@ -80,7 +81,7 @@ export class MemoryFinanceStore implements FinanceStore {
   private invites = new Map<string, InternalInvite>()
   private accountInvites = new Map<string, InternalAccountInvite>()
   private accountAccess = new Map<string, Map<string, 'owner' | 'editor'>>()
-  private idempotency = new Map<string, string>()
+  private idempotency = new Map<string, { id: string; requestHash: string }>()
   private quickKeys = new Map<string, string>()
 
   async createSession(identity: TelegramIdentity, timezone: string) {
@@ -345,11 +346,15 @@ export class MemoryFinanceStore implements FinanceStore {
   }
 
   async createTransaction(userId: string, input: TransactionInput, idempotencyKey: string) {
+    const uniqueKey = `${userId}:transaction:${idempotencyKey}`
+    const requestHash = transactionRequestHash(input)
+    const existing = this.idempotency.get(uniqueKey)
+    if (existing) {
+      if (existing.requestHash !== requestHash) throw conflict('Этот Idempotency-Key уже использован для другой операции')
+      return { id: existing.id }
+    }
     this.requireAccountAccess(userId, input.accountId)
     if (input.targetAccountId) this.requireAccountAccess(userId, input.targetAccountId)
-    const uniqueKey = `${userId}:transaction:${idempotencyKey}`
-    const existing = this.idempotency.get(uniqueKey)
-    if (existing) return { id: existing }
     this.validateTransactionRelations(input.workspaceId, input)
     const transaction: TransactionView = {
       id: randomUUID(), type: input.type, amountKopecks: input.amountKopecks, accountId: input.accountId,
@@ -357,7 +362,7 @@ export class MemoryFinanceStore implements FinanceStore {
       note: input.note, source: input.source, authorName: this.requireUser(userId).firstName, version: 1,
     }
     this.transactions.get(input.workspaceId)!.push(transaction)
-    this.idempotency.set(uniqueKey, transaction.id)
+    this.idempotency.set(uniqueKey, { id: transaction.id, requestHash })
     return { id: transaction.id }
   }
 

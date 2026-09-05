@@ -55,6 +55,13 @@ describe('Lomme API', () => {
     const second = await app.inject({ method: 'POST', url: '/api/v1/transactions', headers, payload })
     expect(first.statusCode).toBe(201)
     expect(second.json().id).toBe(first.json().id)
+
+    const mismatched = await app.inject({
+      method: 'POST', url: '/api/v1/transactions', headers,
+      payload: { ...payload, amountKopecks: payload.amountKopecks + 1 },
+    })
+    expect(mismatched.statusCode).toBe(409)
+    expect(mismatched.json().error.code).toBe('VERSION_CONFLICT')
   })
 
   it('принимает ключ категории длиннее 16 символов', async () => {

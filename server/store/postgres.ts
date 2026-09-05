@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { DeliveryKind, ReminderCandidate } from '../telegram/reminders.js'
 import { hashToken, randomToken } from '../lib/security.js'
+import { transactionRequestHash } from '../lib/idempotency.js'
 import type {
   AccountInput,
   QuickEntryResult,
@@ -89,6 +90,10 @@ export class PostgresFinanceStore implements FinanceStore {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
+      // A row that does not exist cannot be protected by SELECT FOR UPDATE.
+      // The transaction-scoped advisory lock serialises first launches for the
+      // same Telegram identity before either one tries to create its workspace.
+      await client.query(`SELECT pg_advisory_xact_lock($1::bigint)`, [String(identity.id)])
       let userResult = await client.query(`SELECT id, first_name, username, timezone FROM users WHERE telegram_user_id = $1 AND deleted_at IS NULL FOR UPDATE`, [identity.id])
       let userId: string
       if (!userResult.rowCount) {
@@ -449,8 +454,25 @@ export class PostgresFinanceStore implements FinanceStore {
 
   async createTransaction(userId: string, input: TransactionInput, idempotencyKey: string) {
     const client = await this.pool.connect(); const key = `${userId}:transaction:${idempotencyKey}`
+    const requestHash = transactionRequestHash(input)
     try {
       await client.query('BEGIN')
+      // INSERT ... ON CONFLICT is the lock: concurrent first requests wait for
+      // the winner to commit, then read its response instead of surfacing the
+      // unique-key violation as a 500.
+      const claimed = await client.query(
+        `INSERT INTO idempotency_keys (key,user_id,operation,response,request_hash)
+         VALUES ($1,$2,'create_transaction','{}'::jsonb,$3)
+         ON CONFLICT (key) DO NOTHING RETURNING key`,
+        [key, userId, requestHash],
+      )
+      if (!claimed.rowCount) {
+        const seen = await client.query(`SELECT operation,response,request_hash FROM idempotency_keys WHERE key=$1 AND user_id=$2`, [key, userId])
+        if (!seen.rowCount || seen.rows[0].operation !== 'create_transaction') throw conflict('Этот Idempotency-Key уже занят')
+        if (seen.rows[0].request_hash && seen.rows[0].request_hash !== requestHash) throw conflict('Этот Idempotency-Key уже использован для другой операции')
+        await client.query('COMMIT')
+        return seen.rows[0].response as { id: string }
+      }
       const sourceAccess = await this.assertAccountAccess(client, userId, input.accountId)
       if (sourceAccess.workspaceId !== input.workspaceId) throw forbidden('Кошелёк принадлежит другому пространству')
       if (input.targetAccountId) {
@@ -458,11 +480,9 @@ export class PostgresFinanceStore implements FinanceStore {
         if (targetAccess.workspaceId !== input.workspaceId) throw forbidden('Счёт назначения принадлежит другому пространству')
       }
       await this.validateRelations(client, input.workspaceId, input)
-      const seen = await client.query(`SELECT response FROM idempotency_keys WHERE key=$1 AND user_id=$2`, [key, userId])
-      if (seen.rowCount) { await client.query('COMMIT'); return seen.rows[0].response as { id: string } }
       const id = randomUUID()
       await client.query(`INSERT INTO transactions (id,workspace_id,type,amount_kopecks,account_id,target_account_id,category_id,occurred_at,note,source,created_by_user_id,updated_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`, [id, input.workspaceId, input.type, input.amountKopecks, input.accountId, input.targetAccountId || null, input.categoryId || null, input.occurredAt, input.note, input.source, userId])
-      await client.query(`INSERT INTO idempotency_keys (key,user_id,operation,response) VALUES ($1,$2,'create_transaction',$3)`, [key, userId, JSON.stringify({ id })])
+      await client.query(`UPDATE idempotency_keys SET response=$2 WHERE key=$1`, [key, JSON.stringify({ id })])
       await this.audit(client, input.workspaceId, userId, 'transaction', id, 'create', { type: input.type, amountKopecks: input.amountKopecks })
       await client.query('COMMIT'); return { id }
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
