@@ -4,12 +4,12 @@ import { useMutation } from '@tanstack/react-query'
 import {
   ArrowDownLeft, Check, ChevronLeft,
   ChevronRight, CircleSlash2, Copy, LoaderCircle, Zap, Download,
-  LayoutGrid, Mail, Settings2, Users,
+  LayoutGrid, Mail, Settings2, Users, Bell,
 } from 'lucide-react'
 import { api, ApiError, haptic } from '../../lib/api'
 import { copyText } from '../../lib/telegram'
 
-type SettingsScreen = 'root' | 'automations'
+type SettingsScreen = 'root' | 'automations' | 'notifications'
 type SettingsMotion = 'idle' | 'enter' | 'return'
 const SETTINGS_NAVIGATION_DURATION_MS = 240
 type Props = {
@@ -49,7 +49,9 @@ export function SettingsPage({ backRef, notify, onNavigate, onClose }: Props) {
     return () => { backRef.current = null }
   }, [back, backRef, screen])
 
-  if (screen === 'automations') return <AutomationsScreen motion={screenMotion === 'enter' ? ' motion-enter-push' : ''} onBack={back} notify={notify} />
+  const enterMotion = screenMotion === 'enter' ? ' motion-enter-push' : ''
+  if (screen === 'automations') return <AutomationsScreen motion={enterMotion} onBack={back} notify={notify} />
+  if (screen === 'notifications') return <NotificationsScreen motion={enterMotion} onBack={back} notify={notify} />
 
   return <div className={`settings-screen${screenMotion === 'return' ? ' motion-return-push' : ''}`}>
     <SettingsHeader title="Настройки" onBack={onClose} />
@@ -61,6 +63,7 @@ export function SettingsPage({ backRef, notify, onNavigate, onClose }: Props) {
     <SettingsSection title="Дополнительно">
       <SettingsRow icon={<Zap />} label="Быстрый ввод" value="Шорткат" onClick={() => open('automations')} />
       <SettingsRow icon={<Users />} label="Семейный кошелёк" onClick={() => onNavigate('family')} />
+      <SettingsRow icon={<Bell />} label="Уведомления" onClick={() => open('notifications')} />
     </SettingsSection>
 
     <SettingsSection title="Поддержка">
@@ -87,6 +90,115 @@ function SettingsRow({ icon, label, value, onClick, muted }: {
   return onClick
     ? <button className="settings-row" type="button" onClick={onClick}>{content}</button>
     : <div className="settings-row settings-row-static">{content}</div>
+}
+
+type ReminderSettings = { enabled: boolean; localTime: string; daysOfWeek: number[] }
+
+const WEEKDAYS = [
+  { day: 1, short: 'Пн' }, { day: 2, short: 'Вт' }, { day: 3, short: 'Ср' }, { day: 4, short: 'Чт' },
+  { day: 5, short: 'Пт' }, { day: 6, short: 'Сб' }, { day: 7, short: 'Вс' },
+]
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7]
+
+function weekdaySummary(days: number[]) {
+  if (days.length === 7) return 'каждый день'
+  if (days.length === 5 && days.every((day) => day <= 5)) return 'по будням'
+  if (days.length === 2 && days.every((day) => day >= 6)) return 'по выходным'
+  return WEEKDAYS.filter((item) => days.includes(item.day)).map((item) => item.short).join(', ').toLocaleLowerCase('ru')
+}
+
+/**
+ * Reminders can be switched off here, which is the whole reason the bot is
+ * allowed to send them. Every change saves straight away: a settings screen
+ * with a Save button invites people to leave without pressing it.
+ */
+function NotificationsScreen({ motion, onBack, notify }: { motion: string; onBack(): void; notify(text: string): void }) {
+  const [settings, setSettings] = useState<ReminderSettings | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    api<ReminderSettings>('/reminders')
+      .then((value) => { if (!cancelled) setSettings(value) })
+      .catch(() => { if (!cancelled) setLoadFailed(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  const save = useMutation({
+    mutationFn: (next: ReminderSettings) => api<ReminderSettings>('/reminders', { method: 'PATCH', body: JSON.stringify(next) }),
+    onSuccess: (saved) => setSettings(saved),
+    onError: (error) => notify(error instanceof ApiError ? error.message : 'Не удалось сохранить'),
+  })
+
+  // The screen shows the change at once and the request follows. Waiting for a
+  // round trip to move a switch feels broken on a phone.
+  const apply = (next: ReminderSettings) => {
+    haptic()
+    setSettings(next)
+    save.mutate(next)
+  }
+
+  const toggleDay = (day: number) => {
+    if (!settings) return
+    const days = settings.daysOfWeek.includes(day)
+      ? settings.daysOfWeek.filter((item) => item !== day)
+      : [...settings.daysOfWeek, day].sort()
+    // An empty week would silently mean "never" while the switch still says on.
+    if (!days.length) return
+    apply({ ...settings, daysOfWeek: days })
+  }
+
+  return <div className={`settings-subscreen${motion}`}>
+    <SettingsHeader title="Уведомления" onBack={onBack} />
+
+    {loadFailed && <p className="reminder-note">Не удалось загрузить настройки. Попробуй открыть экран заново.</p>}
+
+    {settings && <>
+      <SettingsSection title="Напоминание о тратах">
+        <button className="settings-row" type="button" onClick={() => apply({ ...settings, enabled: !settings.enabled })}>
+          <span className="settings-row-icon"><Bell /></span>
+          <strong>Напоминать в чате</strong>
+          <em><span className={`fake-toggle${settings.enabled ? ' on' : ''}`} aria-hidden="true"><b /></span></em>
+        </button>
+      </SettingsSection>
+
+      <p className="reminder-note">
+        Если за день уже есть записи, напоминание не придёт — писать не о чем.
+      </p>
+
+      {settings.enabled && <>
+        <SettingsSection title="Когда">
+          <div className="settings-row settings-row-static">
+            <span className="settings-row-icon" />
+            <strong>Время</strong>
+            <em>
+              <input
+                className="reminder-time"
+                type="time"
+                value={settings.localTime}
+                onChange={(event) => { if (event.target.value) apply({ ...settings, localTime: event.target.value }) }}
+              />
+            </em>
+          </div>
+        </SettingsSection>
+
+        <span className="settings-label">Дни: {weekdaySummary(settings.daysOfWeek)}</span>
+        <div className="reminder-days" role="group" aria-label="Дни недели">
+          {WEEKDAYS.map((item) => {
+            const active = settings.daysOfWeek.includes(item.day)
+            return <button
+              key={item.day}
+              type="button"
+              className={`reminder-day${active ? ' active' : ''}`}
+              aria-pressed={active}
+              onClick={() => toggleDay(item.day)}
+            >{item.short}</button>
+          })}
+        </div>
+        {settings.daysOfWeek.length < 7 && <button className="reminder-reset" type="button" onClick={() => apply({ ...settings, daysOfWeek: EVERY_DAY })}>Каждый день</button>}
+      </>}
+    </>}
+  </div>
 }
 
 type ShortcutSheet = 'backTap' | 'actionButton' | 'homeWidget' | 'controlCenter' | 'reissue'

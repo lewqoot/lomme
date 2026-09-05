@@ -11,12 +11,14 @@ import type {
   createTransactionSchema,
   quickEntrySchema,
   createWorkspaceSchema,
+  reminderSettingsSchema,
   updateCategorySchema,
   updateTransactionSchema,
   updateAccountSchema,
   activeAccountSchema,
 } from '../../src/shared/contracts.js'
 import type { TelegramIdentity } from '../auth/telegram.js'
+import type { ReminderCandidate } from '../telegram/reminders.js'
 
 export type AuthInput = z.infer<typeof authTelegramSchema>
 export type TransactionInput = z.infer<typeof createTransactionSchema>
@@ -29,6 +31,8 @@ export type CategoryInput = z.infer<typeof createCategorySchema>
 export type CategoryUpdate = z.infer<typeof updateCategorySchema>
 export type CategoryReorder = z.infer<typeof reorderCategoriesSchema>
 export type WorkspaceInput = z.infer<typeof createWorkspaceSchema>
+export type ReminderSettingsInput = z.infer<typeof reminderSettingsSchema>
+export type ReminderSettings = ReminderSettingsInput
 
 /** What both free-text entry points report back, enough to answer a person. */
 export type QuickEntryResult = {
@@ -98,6 +102,16 @@ export interface FinanceStore {
   createInvite(userId: string, workspaceId: string): Promise<{ token: string; expiresAt: string }>
   acceptInvite(userId: string, token: string): Promise<{ workspaceId: string }>
   removeMember(userId: string, workspaceId: string, memberUserId: string): Promise<void>
+  reminderSettings(userId: string): Promise<ReminderSettings>
+  saveReminderSettings(userId: string, input: ReminderSettingsInput): Promise<ReminderSettings>
+  /** Everyone a daily reminder could reach; who actually gets one is decided per person. */
+  reminderCandidates(): Promise<ReminderCandidate[]>
+  /** False when tonight's reminder was already claimed by another worker tick. */
+  claimReminderDelivery(userId: string, scheduledFor: Date): Promise<boolean>
+  settleReminderDelivery(userId: string, scheduledFor: Date, error?: string): Promise<void>
+  releaseReminderDelivery(userId: string, scheduledFor: Date): Promise<void>
+  /** Telegram says this chat is gone for good; stop writing to it. */
+  revokeBotWriteAccess(telegramUserId: number): Promise<void>
   runWorkerBatch(): Promise<{ expiredMedia: number; forgottenUpdates: number }>
   health(): Promise<{ database: 'ok' | 'memory' }>
   close(): Promise<void>

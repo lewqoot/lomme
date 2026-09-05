@@ -2572,3 +2572,54 @@ button:active:not(:disabled),
   .shortcut-guide-scrim, .shortcut-guide-sheet { animation-duration: 120ms; }
   .shortcut-guide-sheet { animation-name: shortcut-scrim-in; }
 }
+
+/* Notifications screen: the switch that makes daily reminders acceptable. */
+.reminder-note {
+  margin: 6px 4px 14px;
+  color: var(--muted);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+.reminder-time {
+  min-width: 74px;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-size-13-5);
+  text-align: right;
+  background: transparent;
+}
+.reminder-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.reminder-day {
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-emphasis);
+  background: var(--panel);
+  transition: opacity .16s ease;
+}
+.reminder-day.active {
+  color: var(--ref-color-fff);
+  background: var(--ink);
+}
+.reminder-reset {
+  margin-top: 10px;
+  min-height: 40px;
+  width: 100%;
+  border: 0;
+  border-radius: 13px;
+  color: var(--ink);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-emphasis);
+  background: var(--panel);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reminder-day { transition: none; }
+}

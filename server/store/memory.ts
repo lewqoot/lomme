@@ -11,6 +11,7 @@ import {
   type WorkspaceSummary,
 } from '../../src/shared/contracts.js'
 import type { TelegramIdentity } from '../auth/telegram.js'
+import type { ReminderCandidate } from '../telegram/reminders.js'
 import { calculateSummary } from '../lib/analytics.js'
 import { issueQuickKey, quickKeyMatches } from '../lib/quick-key.js'
 import { parseQuickAmount, resolveQuickEntry } from '../../src/shared/quick-entry.js'
@@ -28,6 +29,7 @@ import type {
   CategoryUpdate,
   FinanceStore,
   QuickEntryInput,
+  ReminderSettingsInput,
   SessionUser,
   TransactionInput,
   TransactionUpdate,
@@ -60,6 +62,8 @@ export class MemoryFinanceStore implements FinanceStore {
   private usersByTelegram = new Map<number, string>()
   private sessions = new Map<string, { userId: string; expiresAt: Date }>()
   private processedUpdates = new Set<number>()
+  private reminders = new Map<string, { enabled: boolean; localTime: string; daysOfWeek: number[] }>()
+  private reminderDeliveries = new Set<string>()
   private workspaces = new Map<string, InternalWorkspace>()
   private members = new Map<string, MemberView[]>()
   private accounts = new Map<string, AccountView[]>()
@@ -494,6 +498,55 @@ export class MemoryFinanceStore implements FinanceStore {
     if (userId === memberUserId) throw forbidden('Владелец не может удалить себя')
     this.members.set(workspaceId, this.members.get(workspaceId)!.filter((member) => member.userId !== memberUserId))
     for (const account of this.accounts.get(workspaceId) || []) this.accountAccess.get(account.id)?.delete(memberUserId)
+  }
+
+  async reminderSettings(userId: string) {
+    return this.reminders.get(userId) ?? { enabled: false, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
+  }
+
+  async saveReminderSettings(userId: string, input: ReminderSettingsInput) {
+    this.requireUser(userId)
+    this.reminders.set(userId, { enabled: input.enabled, localTime: input.localTime, daysOfWeek: [...input.daysOfWeek].sort() })
+    return this.reminderSettings(userId)
+  }
+
+  async reminderCandidates(): Promise<ReminderCandidate[]> {
+    const candidates: ReminderCandidate[] = []
+    for (const [userId, settings] of this.reminders) {
+      const user = this.users.get(userId)
+      if (!settings.enabled || !user?.botWriteAccess) continue
+      const own = [...this.transactions.values()].flat()
+        .filter((entry) => entry.authorName === user.firstName)
+        .map((entry) => new Date(entry.occurredAt).getTime())
+      candidates.push({
+        userId,
+        telegramUserId: user.telegramUserId,
+        timezone: user.timezone,
+        localTime: settings.localTime,
+        daysOfWeek: settings.daysOfWeek,
+        lastEntryAt: own.length ? new Date(Math.max(...own)) : null,
+        deliveredCount: [...this.reminderDeliveries].filter((key) => key.startsWith(`${userId}:`)).length,
+      })
+    }
+    return candidates
+  }
+
+  async claimReminderDelivery(userId: string, scheduledFor: Date) {
+    const key = `${userId}:${scheduledFor.toISOString()}`
+    if (this.reminderDeliveries.has(key)) return false
+    this.reminderDeliveries.add(key)
+    return true
+  }
+
+  async settleReminderDelivery() {}
+
+  async releaseReminderDelivery(userId: string, scheduledFor: Date) {
+    this.reminderDeliveries.delete(`${userId}:${scheduledFor.toISOString()}`)
+  }
+
+  async revokeBotWriteAccess(telegramUserId: number) {
+    const userId = this.usersByTelegram.get(telegramUserId)
+    if (userId) this.users.get(userId)!.botWriteAccess = false
   }
 
   async runWorkerBatch() { this.processedUpdates.clear(); return { expiredMedia: 0, forgottenUpdates: 0 } }

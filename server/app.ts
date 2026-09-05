@@ -18,6 +18,7 @@ import {
   inviteTokenSchema,
   legacyPreviewMigrationSchema,
   quickEntrySchema,
+  reminderSettingsSchema,
   reorderCategoriesSchema,
   transactionPageQuerySchema,
   updateAccountSchema,
@@ -345,6 +346,12 @@ export async function buildApp(store: FinanceStore) {
   // Issued from inside the Mini App, used from the iOS shortcut. An existing
   // key is only replaced after an explicit confirmation from the setup screen:
   // merely opening the screen must never invalidate an installed command.
+  app.get('/api/v1/reminders', { preHandler: requireUser }, async (request) =>
+    store.reminderSettings(request.currentUser!.id))
+
+  app.patch('/api/v1/reminders', { preHandler: requireUser }, async (request) =>
+    store.saveReminderSettings(request.currentUser!.id, parse(reminderSettingsSchema, request.body)))
+
   app.post('/api/v1/quick-key', { preHandler: requireUser, config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (request, reply) => {
     const userId = request.currentUser!.id
     const replace = (request.body as { replace?: unknown } | null)?.replace === true

@@ -124,6 +124,25 @@ export function couldNotRecord(): BotMessage {
   return { text: '⚠️ Не записалось\nПопробуй ещё раз' }
 }
 
+/**
+ * The evening nudge. It is only ever sent to someone who recorded nothing
+ * today, so it can assume there is nothing to report rather than nag.
+ *
+ * The line about switching it off appears in the first three only: after that
+ * it is noise, and the setting has not moved.
+ */
+export function dailyReminder(deliveredBefore: number): BotMessage {
+  const lines = [
+    'Зашёл напомнить про траты 👋',
+    '',
+    'Напиши пару слов — 300 метро — и я запишу.',
+  ]
+  if (deliveredBefore < 3) {
+    lines.push('', 'Время можно поменять или выключить напоминания в приложении, раздел «Уведомления».')
+  }
+  return { text: lines.join('\n') }
+}
+
 export function accountInvite(accountName: string, inviteUrl: string): BotMessage {
   return {
     text: [

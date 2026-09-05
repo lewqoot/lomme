@@ -14,6 +14,13 @@ export const timeZoneSchema = z.string().trim().min(1).max(80).refine((timeZone)
 }, 'Укажите корректный часовой пояс')
 
 export const transactionTypeSchema = z.enum(['expense', 'income', 'transfer'])
+/** Daily reminder settings, as the notifications screen sends them. */
+export const reminderSettingsSchema = z.object({
+  enabled: z.boolean(),
+  localTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Время в формате 20:00'),
+  daysOfWeek: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+})
+
 export const transactionSourceSchema = z.enum(['manual', 'import', 'voice', 'receipt', 'shortcut', 'bot'])
 export const transactionPageQuerySchema = z.object({
   workspaceId: uuidSchema,

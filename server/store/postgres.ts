@@ -20,9 +20,11 @@ import { DATA_COLORS } from '../../src/shared/design-tokens.js'
 import { resolveRange, type SnapshotRange } from '../lib/range.js'
 import { decodeTransactionCursor, encodeTransactionCursor } from '../lib/transaction-cursor.js'
 import { AppError, conflict, forbidden, notFound } from '../lib/errors.js'
+import type { ReminderCandidate } from '../telegram/reminders.js'
 import { hashToken, randomToken } from '../lib/security.js'
 import type {
   AccountInput,
+  ReminderSettingsInput,
   AccountUpdate,
   ActiveAccountInput,
   CategoryInput,
@@ -517,6 +519,85 @@ export class PostgresFinanceStore implements FinanceStore {
     await this.pool.query(`DELETE FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 AND role='member'`, [workspaceId, memberUserId])
     await this.repairActiveAccount(memberUserId)
   }
+  async reminderSettings(userId: string) {
+    const result = await this.pool.query(
+      `SELECT enabled, local_time, days_of_week FROM reminders WHERE user_id=$1`, [userId])
+    const row = result.rows[0]
+    if (!row) return { enabled: false, localTime: '20:00', daysOfWeek: [1, 2, 3, 4, 5, 6, 7] }
+    return {
+      enabled: row.enabled as boolean,
+      localTime: String(row.local_time).slice(0, 5),
+      daysOfWeek: (row.days_of_week as number[]).slice().sort(),
+    }
+  }
+
+  async saveReminderSettings(userId: string, input: ReminderSettingsInput) {
+    // The reminder follows the person's own clock, so it takes the time zone
+    // their app is currently reporting rather than one set separately.
+    await this.pool.query(
+      `INSERT INTO reminders (user_id, enabled, timezone, local_time, days_of_week, updated_at)
+       VALUES ($1,$2,COALESCE((SELECT timezone FROM users WHERE id=$1),'Europe/Moscow'),$3,$4,now())
+       ON CONFLICT (user_id) DO UPDATE SET enabled=EXCLUDED.enabled, timezone=EXCLUDED.timezone,
+         local_time=EXCLUDED.local_time, days_of_week=EXCLUDED.days_of_week, updated_at=now()`,
+      [userId, input.enabled, input.localTime, input.daysOfWeek])
+    return this.reminderSettings(userId)
+  }
+
+  /**
+   * Everyone a reminder could go to tonight. Whether it actually goes is worked
+   * out per person in `reminderDueAt`, because the rules depend on their own
+   * time zone and on what they recorded today.
+   */
+  async reminderCandidates(): Promise<ReminderCandidate[]> {
+    const result = await this.pool.query(
+      `SELECT r.user_id, u.telegram_user_id, r.timezone, r.local_time, r.days_of_week,
+              (SELECT MAX(t.occurred_at) FROM transactions t
+                 WHERE t.created_by_user_id=r.user_id AND t.deleted_at IS NULL) AS last_entry_at,
+              (SELECT count(*) FROM reminder_deliveries d
+                 WHERE d.user_id=r.user_id AND d.delivered_at IS NOT NULL) AS delivered_count
+         FROM reminders r JOIN users u ON u.id=r.user_id
+        WHERE r.enabled AND u.deleted_at IS NULL AND u.bot_write_access
+        LIMIT 5000`)
+    return result.rows.map((row) => ({
+      userId: row.user_id as string,
+      telegramUserId: Number(row.telegram_user_id),
+      timezone: row.timezone as string,
+      localTime: String(row.local_time).slice(0, 5),
+      daysOfWeek: row.days_of_week as number[],
+      lastEntryAt: row.last_entry_at ? new Date(row.last_entry_at as string) : null,
+      deliveredCount: Number(row.delivered_count),
+    }))
+  }
+
+  /** The unique index on (user, scheduled_for) is what stops a second send. */
+  async claimReminderDelivery(userId: string, scheduledFor: Date) {
+    const result = await this.pool.query(
+      `INSERT INTO reminder_deliveries (user_id, scheduled_for) VALUES ($1,$2)
+       ON CONFLICT (user_id, scheduled_for) DO NOTHING`, [userId, scheduledFor])
+    return result.rowCount === 1
+  }
+
+  async settleReminderDelivery(userId: string, scheduledFor: Date, error?: string) {
+    if (!error) {
+      await this.pool.query(
+        `UPDATE reminder_deliveries SET delivered_at=now() WHERE user_id=$1 AND scheduled_for=$2`, [userId, scheduledFor])
+      return
+    }
+    await this.pool.query(
+      `UPDATE reminder_deliveries SET error=$3 WHERE user_id=$1 AND scheduled_for=$2`, [userId, scheduledFor, error])
+  }
+
+  async releaseReminderDelivery(userId: string, scheduledFor: Date) {
+    await this.pool.query(
+      `DELETE FROM reminder_deliveries WHERE user_id=$1 AND scheduled_for=$2 AND delivered_at IS NULL`, [userId, scheduledFor])
+  }
+
+  /** Called when Telegram says the chat is gone for good. */
+  async revokeBotWriteAccess(telegramUserId: number) {
+    await this.pool.query(
+      `UPDATE users SET bot_write_access=false,updated_at=now() WHERE telegram_user_id=$1`, [telegramUserId])
+  }
+
   async runWorkerBatch() {
     const expired = await this.pool.query(`UPDATE media_objects SET deleted_at=now() WHERE deleted_at IS NULL AND expires_at<=now() RETURNING id`)
     // Telegram stops retrying an update long before a day is out, so older rows
